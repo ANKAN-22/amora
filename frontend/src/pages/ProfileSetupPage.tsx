@@ -66,6 +66,11 @@ export function ProfileSetupPage() {
 
   function finish() {
     if (!progress.complete) {
+      const answered = profile.prompts.filter((prompt) => prompt.answer.trim().length >= 8).length
+      if (profile.photos.length < 2) setStep(0)
+      else if (profile.bio.trim().length < 40 || answered < 2) setStep(1)
+      else if (profile.interests.length < 3) setStep(2)
+      else setStep(3)
       setNotice(progress.missing[0] ?? 'Finish the missing parts of your profile.')
       return
     }
@@ -192,21 +197,27 @@ function AboutStep({
           className="w-full rounded-2xl bg-[#fff5f7] px-4 py-3 text-sm text-ink outline-none ring-1 ring-black/5 focus:bg-white focus:ring-coral"
         />
       </label>
-      {profile.prompts.map((prompt, index) => (
-        <label key={prompt.question} className="block">
-          <span className="mb-1.5 block text-sm font-semibold">{prompt.question}</span>
-          <input
-            value={prompt.answer}
-            onChange={(event) => {
-              const prompts = profile.prompts.map((item, itemIndex) =>
-                itemIndex === index ? { ...item, answer: event.target.value } : item,
-              )
-              onChange({ ...profile, prompts })
-            }}
-            className="h-12 w-full rounded-2xl bg-[#fff5f7] px-4 text-sm outline-none ring-1 ring-black/5 focus:bg-white focus:ring-coral"
-          />
-        </label>
-      ))}
+      {profile.prompts.map((prompt, index) => {
+        const count = prompt.answer.trim().length
+        return (
+          <label key={prompt.question} className="block">
+            <span className="mb-1.5 block text-sm font-semibold">{prompt.question}</span>
+            <input
+              value={prompt.answer}
+              onChange={(event) => {
+                const prompts = profile.prompts.map((item, itemIndex) =>
+                  itemIndex === index ? { ...item, answer: event.target.value } : item,
+                )
+                onChange({ ...profile, prompts })
+              }}
+              className="h-12 w-full rounded-2xl bg-[#fff5f7] px-4 text-sm outline-none ring-1 ring-black/5 focus:bg-white focus:ring-coral"
+            />
+            <span className={`mt-1 block text-xs ${count >= 8 ? 'text-mute' : 'text-coral'}`}>
+              {count >= 8 ? 'Long enough' : `${count}/8 characters`}
+            </span>
+          </label>
+        )
+      })}
     </div>
   )
 }

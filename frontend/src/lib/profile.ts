@@ -108,7 +108,14 @@ export function profileProgress(profile: StudentProfile) {
   const missing: string[] = []
   if (profile.photos.length < 2) missing.push('Add 2 photos')
   if (bioLength < 40) missing.push('Write a bio of at least 40 characters')
-  if (answeredPrompts(profile) < 2) missing.push('Answer 2 prompts')
+  const answered = answeredPrompts(profile)
+  if (answered < 2) {
+    missing.push(
+      answered === 1
+        ? 'One prompt still needs at least 8 characters'
+        : 'Answer 2 prompts with at least 8 characters each',
+    )
+  }
   if (profile.interests.length < 3) missing.push('Pick 3 interests')
   if (basicsScore === 0) missing.push('Add your department and year')
   if (prefsScore === 0) missing.push('Set who you want to meet')
