@@ -11,7 +11,7 @@ export function AppShell() {
           <p className="text-center text-[17px] font-bold tracking-tight">Amora</p>
           <span />
         </header>
-        <main className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <main className="flex min-h-0 flex-1 flex-col overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <Outlet />
         </main>
         <BottomNav />
