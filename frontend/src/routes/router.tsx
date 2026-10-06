@@ -1,6 +1,12 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { AdminShell } from '@/layouts/AdminShell.tsx'
 import { AppShell } from '@/layouts/AppShell.tsx'
 import { PublicShell } from '@/layouts/PublicShell.tsx'
+import { AdminHomePage } from '@/pages/AdminHomePage.tsx'
+import { AdminLoginPage } from '@/pages/AdminLoginPage.tsx'
+import { AdminReportsPage } from '@/pages/AdminReportsPage.tsx'
+import { AdminUsersPage } from '@/pages/AdminUsersPage.tsx'
+import { AdminVerificationPage } from '@/pages/AdminVerificationPage.tsx'
 import { AgePage } from '@/pages/AgePage.tsx'
 import { ChatPage } from '@/pages/ChatPage.tsx'
 import { DiscoverPage } from '@/pages/DiscoverPage.tsx'
@@ -46,6 +52,13 @@ export function AppRoutes() {
         <Route path="settings/notifications" element={<NotificationsPage />} />
         <Route path="settings/subscription" element={<SubscriptionPage />} />
         <Route path="settings/help" element={<HelpPage />} />
+      </Route>
+      <Route element={<AdminShell />}>
+        <Route path="admin/login" element={<AdminLoginPage />} />
+        <Route path="admin" element={<AdminHomePage />} />
+        <Route path="admin/verification" element={<AdminVerificationPage />} />
+        <Route path="admin/users" element={<AdminUsersPage />} />
+        <Route path="admin/reports" element={<AdminReportsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

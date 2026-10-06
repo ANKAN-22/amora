@@ -79,6 +79,17 @@ export function saveAccount(account: StudentAccount) {
   localStorage.setItem(sessionKey, account.email)
 }
 
+export function updateAccountStatus(status: VerificationStatus, reviewNote: string) {
+  const account = readAccount()
+  if (!account) return false
+  localStorage.setItem(accountKey, JSON.stringify({ ...account, verificationStatus: status }))
+  const proof = readVerification()
+  if (proof) {
+    localStorage.setItem(verificationKey, JSON.stringify({ ...proof, reviewNote }))
+  }
+  return true
+}
+
 export function readSessionEmail(): string | null {
   return localStorage.getItem(sessionKey)
 }

@@ -38,6 +38,7 @@ export type Report = {
   messageId: string
   reason: ReportReason
   createdAt: string
+  resolved: boolean
 }
 
 export type SocialState = {
@@ -92,7 +93,7 @@ function isMessage(value: unknown): value is ChatMessage {
   )
 }
 
-function isReport(value: unknown): value is Report {
+function isReport(value: unknown): value is Omit<Report, 'resolved'> & { resolved?: boolean } {
   if (!value || typeof value !== 'object') return false
   const report = value as Partial<Report>
   return (
@@ -118,7 +119,9 @@ function load(): SocialState {
       hidden: strings(parsed.hidden),
       matches: Array.isArray(parsed.matches) ? parsed.matches.filter(isMatch) : [],
       messages: Array.isArray(parsed.messages) ? parsed.messages.filter(isMessage) : [],
-      reports: Array.isArray(parsed.reports) ? parsed.reports.filter(isReport) : [],
+      reports: Array.isArray(parsed.reports)
+        ? parsed.reports.filter(isReport).map((report) => ({ ...report, resolved: report.resolved === true }))
+        : [],
     }
   } catch {
     return emptyState()
@@ -334,8 +337,17 @@ export function reportStudent(input: {
         messageId: input.messageId ?? '',
         reason: input.reason,
         createdAt: new Date().toISOString(),
+        resolved: false,
       },
     ],
+  })
+}
+
+export function markReportReviewed(id: string) {
+  if (!state.reports.some((report) => report.id === id && !report.resolved)) return
+  commit({
+    ...state,
+    reports: state.reports.map((report) => (report.id === id ? { ...report, resolved: true } : report)),
   })
 }
 
