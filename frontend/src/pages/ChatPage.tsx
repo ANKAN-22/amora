@@ -2,6 +2,7 @@ import { ArrowLeft, Flag, MoreHorizontal, Send } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { Button } from '@/components/Button.tsx'
+import { ReportReasonList } from '@/components/ReportReasonList.tsx'
 import { Sheet } from '@/components/Sheet.tsx'
 import { studentById } from '@/data/students.ts'
 import { usePageTitle } from '@/hooks/usePageTitle.ts'
@@ -10,7 +11,6 @@ import {
   deleteConversation,
   markMatchSeen,
   messagesFor,
-  reportReasons,
   reportStudent,
   sendMessage,
   unmatch,
@@ -170,13 +170,7 @@ export function ChatPage() {
           title={sheet === 'report-message' ? 'Report this message' : `Report ${student.name.split(' ')[0]}`}
           onClose={() => setSheet(null)}
         >
-          <div className="grid gap-2">
-            {reportReasons.map((reason) => (
-              <Button key={reason} variant="secondary" fullWidth onClick={() => fileReport(reason)}>
-                {reason}
-              </Button>
-            ))}
-          </div>
+          <ReportReasonList onPick={fileReport} />
         </Sheet>
       ) : null}
 

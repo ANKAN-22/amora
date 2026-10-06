@@ -46,6 +46,7 @@ export type SocialState = {
   matches: Match[]
   messages: ChatMessage[]
   blocks: string[]
+  hidden: string[]
   reports: Report[]
 }
 
@@ -60,6 +61,7 @@ const emptyState = (): SocialState => ({
   matches: [],
   messages: [],
   blocks: [],
+  hidden: [],
   reports: [],
 })
 
@@ -113,6 +115,7 @@ function load(): SocialState {
       passed: strings(parsed.passed),
       liked: strings(parsed.liked),
       blocks: strings(parsed.blocks),
+      hidden: strings(parsed.hidden),
       matches: Array.isArray(parsed.matches) ? parsed.matches.filter(isMatch) : [],
       messages: Array.isArray(parsed.messages) ? parsed.messages.filter(isMessage) : [],
       reports: Array.isArray(parsed.reports) ? parsed.reports.filter(isReport) : [],
@@ -162,6 +165,7 @@ export function isMatched(studentId: string, social: SocialState = state) {
 export function isOpen(student: CampusStudent, social: SocialState = state) {
   return (
     !social.blocks.includes(student.id) &&
+    !social.hidden.includes(student.id) &&
     !social.passed.includes(student.id) &&
     !social.liked.includes(student.id) &&
     !isMatched(student.id, social)
@@ -203,10 +207,11 @@ export function likeStudent(studentId: string): LikeResult {
 
   const liked = state.liked.includes(studentId) ? state.liked : [...state.liked, studentId]
   const passed = state.passed.filter((id) => id !== studentId)
+  const hidden = state.hidden.filter((id) => id !== studentId)
   const mutual = student.likedYou || student.likesBack
 
   if (!mutual) {
-    commit({ ...state, liked, passed })
+    commit({ ...state, liked, passed, hidden })
     return { matched: false, matchId: null }
   }
 
@@ -216,6 +221,7 @@ export function likeStudent(studentId: string): LikeResult {
     ...state,
     liked,
     passed,
+    hidden,
     matches: [{ id: matchId, studentId, createdAt, seen: false }, ...state.matches],
     messages: [
       ...state.messages,
@@ -285,10 +291,30 @@ export function blockStudent(studentId: string) {
   commit({
     ...state,
     blocks: state.blocks.includes(studentId) ? state.blocks : [...state.blocks, studentId],
+    hidden: state.hidden.filter((id) => id !== studentId),
     matches: state.matches.filter((match) => match.studentId !== studentId),
     messages: state.messages.filter((message) => !removed.has(message.matchId)),
     liked: state.liked.filter((id) => id !== studentId),
   })
+}
+
+export function unblockStudent(studentId: string) {
+  if (!state.blocks.includes(studentId)) return
+  commit({ ...state, blocks: state.blocks.filter((id) => id !== studentId) })
+}
+
+export function hideStudent(studentId: string) {
+  if (state.blocks.includes(studentId) || state.hidden.includes(studentId)) return
+  commit({ ...state, hidden: [...state.hidden, studentId] })
+}
+
+export function unhideStudent(studentId: string) {
+  if (!state.hidden.includes(studentId)) return
+  commit({ ...state, hidden: state.hidden.filter((id) => id !== studentId) })
+}
+
+export function clearSocial() {
+  commit(emptyState())
 }
 
 export function reportStudent(input: {

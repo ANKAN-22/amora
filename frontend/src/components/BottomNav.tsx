@@ -1,6 +1,7 @@
 import { Compass, Heart, MessageCircle, UserRound } from 'lucide-react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { incomingLikes, useSocial, visibleMatches } from '@/lib/social.ts'
+import { useSettings } from '@/lib/settings.ts'
 
 const tabs = [
   { to: '/discover', label: 'Discover', icon: Compass },
@@ -12,9 +13,10 @@ const tabs = [
 export function BottomNav() {
   const { pathname } = useLocation()
   const social = useSocial()
+  const settings = useSettings()
   const badges: Record<string, number> = {
-    '/likes': incomingLikes(social).length,
-    '/matches': visibleMatches(social).filter((match) => !match.seen).length,
+    '/likes': settings.notifyLikes ? incomingLikes(social).length : 0,
+    '/matches': settings.notifyMatches ? visibleMatches(social).filter((match) => !match.seen).length : 0,
   }
 
   return (
@@ -29,7 +31,9 @@ export function BottomNav() {
               ? pathname === '/matches' || pathname.startsWith('/chat/')
               : to === '/discover'
                 ? pathname === '/discover' || pathname.startsWith('/student/')
-                : pathname === to
+                : to === '/profile'
+              ? pathname === '/profile' || pathname.startsWith('/safety') || pathname.startsWith('/settings')
+              : pathname === to
           const count = badges[to] ?? 0
           return (
             <li key={to}>

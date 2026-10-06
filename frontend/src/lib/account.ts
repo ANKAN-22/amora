@@ -87,6 +87,21 @@ export function clearSession() {
   localStorage.removeItem(sessionKey)
 }
 
+export function statusLabel(status: VerificationStatus) {
+  if (status === 'APPROVED') return 'Approved'
+  if (status === 'PENDING') return 'In review'
+  if (status === 'REJECTED') return 'Declined'
+  if (status === 'RESUBMISSION_REQUIRED') return 'More information needed'
+  return 'Suspended'
+}
+
+export function deleteAccountData() {
+  localStorage.removeItem(accountKey)
+  localStorage.removeItem(sessionKey)
+  localStorage.removeItem(verificationKey)
+  localStorage.removeItem('amora.profile')
+}
+
 export function login(email: string, password: string): boolean {
   const account = readAccount()
   if (!account) return false

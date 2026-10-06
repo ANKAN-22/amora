@@ -2,21 +2,30 @@ import { BadgeCheck, Settings, Shield, UserRound } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Card } from '@/components/Card.tsx'
 import { usePageTitle } from '@/hooks/usePageTitle.ts'
-import { readAccount } from '@/lib/account.ts'
+import { readAccount, statusLabel } from '@/lib/account.ts'
 import { readProfile } from '@/lib/profile.ts'
-
-const rows = [
-  { icon: UserRound, label: 'Edit profile', hint: 'Photos, bio, interests', to: '/profile-setup' },
-  { icon: BadgeCheck, label: 'Verification', hint: 'Approved', to: '/verify' },
-  { icon: Shield, label: 'Safety', hint: 'Block and report', to: '' },
-  { icon: Settings, label: 'Settings', hint: 'Privacy and account', to: '' },
-]
+import { useSettings } from '@/lib/settings.ts'
 
 export function ProfilePage() {
   usePageTitle('Profile')
   const account = readAccount()
   const profile = readProfile()
+  const settings = useSettings()
   const photo = profile?.photos[0]
+  const campus = settings.showCampus
+    ? `${profile?.department || 'MAKAUT'} · ${profile?.year ?? ''}`.replace(/ · $/, '')
+    : 'MAKAUT'
+  const rows = [
+    { icon: UserRound, label: 'Edit profile', hint: 'Photos, bio, interests', to: '/profile-setup' },
+    {
+      icon: BadgeCheck,
+      label: 'Verification',
+      hint: statusLabel(account?.verificationStatus ?? 'PENDING'),
+      to: '/verify',
+    },
+    { icon: Shield, label: 'Safety', hint: 'Block, hide, and report', to: '/safety' },
+    { icon: Settings, label: 'Settings', hint: 'Privacy and account', to: '/settings' },
+  ]
 
   return (
     <div className="pb-8">
@@ -39,8 +48,8 @@ export function ProfilePage() {
       <div className="px-5 pt-12">
         <h1 className="text-xl font-extrabold tracking-tight">{account?.name ?? 'Your profile'}</h1>
         <p className="mt-0.5 text-sm text-mute">
-          {profile?.department || 'MAKAUT'} · {profile?.year}
-          {account?.age ? ` · ${account.age}` : ''}
+          {campus}
+          {settings.showAge && account?.age ? ` · ${account.age}` : ''}
         </p>
         {profile?.bio ? <p className="mt-3 text-sm leading-6">{profile.bio}</p> : null}
         {profile && profile.interests.length > 0 ? (

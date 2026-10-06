@@ -1,11 +1,23 @@
 import { ArrowLeft, Heart, X } from 'lucide-react'
 import { useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
+import { Button } from '@/components/Button.tsx'
 import { MatchOverlay } from '@/components/MatchOverlay.tsx'
 import { Pill } from '@/components/Pill.tsx'
+import { ReportReasonList } from '@/components/ReportReasonList.tsx'
+import { Sheet } from '@/components/Sheet.tsx'
 import { studentById } from '@/data/students.ts'
 import { usePageTitle } from '@/hooks/usePageTitle.ts'
-import { isMatched, likeStudent, passStudent, useSocial } from '@/lib/social.ts'
+import {
+  hideStudent,
+  isMatched,
+  likeStudent,
+  passStudent,
+  reportStudent,
+  unhideStudent,
+  useSocial,
+  type ReportReason,
+} from '@/lib/social.ts'
 
 export function StudentPage() {
   const { studentId = '' } = useParams()
@@ -14,6 +26,8 @@ export function StudentPage() {
   const navigate = useNavigate()
   const social = useSocial()
   const [match, setMatch] = useState<{ name: string; matchId: string } | null>(null)
+  const [reporting, setReporting] = useState(false)
+  const [reported, setReported] = useState(false)
 
   if (!student || social.blocks.includes(student.id)) {
     return <Navigate to="/discover" replace />
@@ -24,10 +38,22 @@ export function StudentPage() {
   const passed = social.passed.includes(student.id)
   const matchRecord = social.matches.find((item) => item.studentId === student.id)
 
+  const hidden = social.hidden.includes(student.id)
+
   function like() {
     const result = likeStudent(student!.id)
     if (!result.matched || !result.matchId) return
     setMatch({ name: student!.name, matchId: result.matchId })
+  }
+
+  function fileReport(reason: ReportReason) {
+    reportStudent({
+      studentId: student!.id,
+      matchId: matchRecord?.id ?? '',
+      reason,
+    })
+    setReporting(false)
+    setReported(true)
   }
 
   return (
@@ -103,7 +129,35 @@ export function StudentPage() {
             )}
           </div>
         )}
+
+        <div className="mt-5 flex justify-center gap-6 text-sm font-semibold">
+          <button
+            type="button"
+            className="text-mute"
+            onClick={() => (hidden ? unhideStudent(student.id) : hideStudent(student.id))}
+          >
+            {hidden ? 'Unhide' : 'Hide from Discover'}
+          </button>
+          <button type="button" className="text-coral" onClick={() => setReporting(true)}>
+            Report
+          </button>
+        </div>
       </div>
+
+      {reporting ? (
+        <Sheet title={`Report ${student.name.split(' ')[0]}`} onClose={() => setReporting(false)}>
+          <ReportReasonList onPick={fileReport} />
+        </Sheet>
+      ) : null}
+
+      {reported ? (
+        <Sheet title="Report saved" onClose={() => setReported(false)}>
+          <p className="text-sm leading-5 text-mute">It’s stored with your account on this browser.</p>
+          <Button fullWidth className="mt-4" onClick={() => setReported(false)}>
+            Done
+          </Button>
+        </Sheet>
+      ) : null}
 
       {match ? (
         <MatchOverlay
