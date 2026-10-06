@@ -1,11 +1,33 @@
 import { Heart, X } from 'lucide-react'
-import { HeartMark } from '@/components/BrandMark.tsx'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Button } from '@/components/Button.tsx'
+import { Card } from '@/components/Card.tsx'
+import { MatchOverlay } from '@/components/MatchOverlay.tsx'
 import { PageHeading } from '@/components/PageHeading.tsx'
 import { Pill } from '@/components/Pill.tsx'
+import { campusStudents, studentById } from '@/data/students.ts'
 import { usePageTitle } from '@/hooks/usePageTitle.ts'
+import { readProfile } from '@/lib/profile.ts'
+import { fitsPreferences, isOpen, likeStudent, passStudent, useSocial } from '@/lib/social.ts'
 
 export function DiscoverPage() {
   usePageTitle('Discover')
+  const navigate = useNavigate()
+  const social = useSocial()
+  const profile = readProfile()
+  const [match, setMatch] = useState<{ name: string; matchId: string } | null>(null)
+
+  const open = campusStudents.filter((student) => isOpen(student, social))
+  const deck = profile ? open.filter((student) => fitsPreferences(student, profile)) : []
+  const student = deck[0] ?? null
+
+  function like(studentId: string) {
+    const result = likeStudent(studentId)
+    if (!result.matched || !result.matchId) return
+    const person = studentById(studentId)
+    if (person) setMatch({ name: person.name, matchId: result.matchId })
+  }
 
   return (
     <div className="flex min-h-full flex-1 flex-col px-5 pt-2 pb-4">
@@ -14,24 +36,81 @@ export function DiscoverPage() {
         <Pill>MAKAUT</Pill>
       </div>
 
-      <article className="relative mt-4 min-h-[24rem] flex-1 overflow-hidden rounded-[1.75rem] bg-gradient-to-b from-[#ffe3eb] via-[#ffc3d2] to-[#ff8fa6] shadow-card">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_28%_18%,white,transparent_42%)]" />
-        <div className="absolute top-[18%] left-1/2 grid size-28 -translate-x-1/2 place-items-center rounded-full bg-white/80 text-coral shadow-soft">
-          <HeartMark className="size-14" />
-        </div>
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 via-black/15 to-transparent px-5 pt-24 pb-24 text-white">
-          <p className="text-xl font-bold">Campus profiles</p>
-          <p className="mt-1 text-sm text-white/85">Verified students will appear here.</p>
-        </div>
-        <div className="absolute inset-x-0 bottom-5 flex items-center justify-center gap-5" aria-hidden="true">
-          <span className="grid size-14 place-items-center rounded-full bg-white text-ink shadow-soft">
-            <X className="size-6" strokeWidth={2.4} />
-          </span>
-          <span className="grid size-16 place-items-center rounded-full bg-ink text-white shadow-soft">
-            <Heart className="size-7" fill="currentColor" />
-          </span>
-        </div>
-      </article>
+      {student ? (
+        <article
+          className="relative mt-4 min-h-[24rem] flex-1 overflow-hidden rounded-[1.75rem] shadow-card"
+          style={{ background: student.background }}
+        >
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_18%,rgba(255,255,255,0.5),transparent_42%)]" />
+          <p className="absolute top-4 left-4 rounded-full bg-white/90 px-3 py-1 text-xs font-bold text-ink">
+            {student.year}
+          </p>
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent px-5 pt-28 pb-24 text-white">
+            <button
+              type="button"
+              className="text-left"
+              aria-label={`View ${student.name}'s profile`}
+              onClick={() => navigate(`/student/${student.id}`)}
+            >
+              <p className="text-2xl font-extrabold tracking-tight">
+                {student.name}, {student.age}
+              </p>
+              <p className="mt-1 text-sm text-white/85">{student.department}</p>
+              <p className="mt-2 text-sm font-semibold text-white underline decoration-white/40 underline-offset-4">
+                View profile
+              </p>
+            </button>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {student.interests.slice(0, 3).map((interest) => (
+                <span key={interest} className="rounded-full bg-white/20 px-3 py-1 text-xs font-semibold">
+                  {interest}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="absolute inset-x-0 bottom-5 flex items-center justify-center gap-5">
+            <button
+              type="button"
+              aria-label={`Pass on ${student.name}`}
+              className="grid size-14 place-items-center rounded-full bg-white text-ink shadow-soft"
+              onClick={() => passStudent(student.id)}
+            >
+              <X className="size-6" strokeWidth={2.4} />
+            </button>
+            <button
+              type="button"
+              aria-label={`Like ${student.name}`}
+              className="grid size-16 place-items-center rounded-full bg-ink text-white shadow-soft"
+              onClick={() => like(student.id)}
+            >
+              <Heart className="size-7" fill="currentColor" />
+            </button>
+          </div>
+        </article>
+      ) : (
+        <Card className="mt-4 flex flex-1 flex-col items-center justify-center px-6 py-14 text-center">
+          <h2 className="text-lg font-bold">{open.length > 0 ? 'No one fits right now' : 'You’re all caught up'}</h2>
+          <p className="mt-1 max-w-[16rem] text-sm leading-5 text-mute">
+            {open.length > 0
+              ? 'Widen your age range or who you’re looking for, and more students will show up here.'
+              : 'New students will show up here. Anyone who already liked you is waiting in Likes.'}
+          </p>
+          <Button
+            className="mt-5"
+            onClick={() => navigate(open.length > 0 ? '/profile-setup' : '/likes')}
+          >
+            {open.length > 0 ? 'Edit preferences' : 'See likes'}
+          </Button>
+        </Card>
+      )}
+
+      {match ? (
+        <MatchOverlay
+          name={match.name}
+          onMessage={() => navigate(`/chat/${match.matchId}`)}
+          onClose={() => setMatch(null)}
+        />
+      ) : null}
     </div>
   )
 }

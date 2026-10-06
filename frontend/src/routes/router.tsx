@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from '@/layouts/AppShell.tsx'
 import { PublicShell } from '@/layouts/PublicShell.tsx'
 import { AgePage } from '@/pages/AgePage.tsx'
+import { ChatPage } from '@/pages/ChatPage.tsx'
 import { DiscoverPage } from '@/pages/DiscoverPage.tsx'
 import { ExitPage } from '@/pages/ExitPage.tsx'
 import { LandingPage } from '@/pages/LandingPage.tsx'
@@ -10,6 +11,7 @@ import { LoginPage } from '@/pages/LoginPage.tsx'
 import { MatchesPage } from '@/pages/MatchesPage.tsx'
 import { ProfilePage } from '@/pages/ProfilePage.tsx'
 import { ProfileSetupPage } from '@/pages/ProfileSetupPage.tsx'
+import { StudentPage } from '@/pages/StudentPage.tsx'
 import { RegisterPage } from '@/pages/RegisterPage.tsx'
 import { VerifyQueuePage } from '@/pages/VerifyQueuePage.tsx'
 
@@ -27,8 +29,10 @@ export function AppRoutes() {
       </Route>
       <Route element={<AppShell />}>
         <Route path="discover" element={<DiscoverPage />} />
+        <Route path="student/:studentId" element={<StudentPage />} />
         <Route path="likes" element={<LikesPage />} />
         <Route path="matches" element={<MatchesPage />} />
+        <Route path="chat/:matchId" element={<ChatPage />} />
         <Route path="profile" element={<ProfilePage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
