@@ -1,5 +1,6 @@
 const accountKey = 'amora.account'
 const sessionKey = 'amora.session'
+const verificationKey = 'amora.verification'
 
 export type VerificationStatus =
   | 'PENDING'
@@ -51,6 +52,26 @@ export function readAccount(): StudentAccount | null {
   }
 }
 
+export function createAccountWithProof(account: StudentAccount, screenshot: string) {
+  const request: VerificationRequest = {
+    screenshot,
+    submittedAt: new Date().toISOString(),
+    reviewNote: '',
+  }
+
+  try {
+    localStorage.setItem(verificationKey, JSON.stringify(request))
+    localStorage.setItem(
+      accountKey,
+      JSON.stringify({ ...account, verificationStatus: 'PENDING' satisfies VerificationStatus }),
+    )
+    localStorage.setItem(sessionKey, account.email)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function saveAccount(account: StudentAccount) {
   localStorage.setItem(accountKey, JSON.stringify(account))
   localStorage.setItem(sessionKey, account.email)
@@ -78,4 +99,55 @@ export function hasSession() {
   const email = readSessionEmail()
   if (!account || !email) return false
   return account.email.toLowerCase() === email.toLowerCase()
+}
+
+export type VerificationRequest = {
+  screenshot: string
+  submittedAt: string
+  reviewNote: string
+}
+
+export function readVerification(): VerificationRequest | null {
+  const raw = localStorage.getItem(verificationKey)
+  if (!raw) return null
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<VerificationRequest>
+    if (!parsed || typeof parsed.screenshot !== 'string' || !parsed.screenshot) return null
+    return {
+      screenshot: parsed.screenshot,
+      submittedAt: typeof parsed.submittedAt === 'string' ? parsed.submittedAt : '',
+      reviewNote: typeof parsed.reviewNote === 'string' ? parsed.reviewNote : '',
+    }
+  } catch {
+    return null
+  }
+}
+
+export function pathAfterLogin() {
+  const account = readAccount()
+  if (account?.verificationStatus === 'APPROVED') return '/discover'
+  return '/verify'
+}
+
+export function submitEnrollmentProof(screenshot: string) {
+  const account = readAccount()
+  if (!account) return false
+
+  const request: VerificationRequest = {
+    screenshot,
+    submittedAt: new Date().toISOString(),
+    reviewNote: '',
+  }
+
+  try {
+    localStorage.setItem(verificationKey, JSON.stringify(request))
+    localStorage.setItem(
+      accountKey,
+      JSON.stringify({ ...account, verificationStatus: 'PENDING' satisfies VerificationStatus }),
+    )
+    return true
+  } catch {
+    return false
+  }
 }

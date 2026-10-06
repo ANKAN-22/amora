@@ -3,7 +3,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/Button.tsx'
 import { TextField } from '@/components/TextField.tsx'
 import { usePageTitle } from '@/hooks/usePageTitle.ts'
-import { hasSession, login } from '@/lib/account.ts'
+import { hasSession, login, pathAfterLogin } from '@/lib/account.ts'
 import { readAgeChoice } from '@/lib/ageGate.ts'
 
 export function LoginPage() {
@@ -16,7 +16,7 @@ export function LoginPage() {
 
   if (choice === 'no') return <Navigate to="/exit" replace />
   if (choice !== 'yes') return <Navigate to="/" replace />
-  if (hasSession()) return <Navigate to="/verify" replace />
+  if (hasSession()) return <Navigate to={pathAfterLogin()} replace />
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -28,7 +28,7 @@ export function LoginPage() {
       setNotice('That email and password don’t match.')
       return
     }
-    navigate('/verify', { replace: true })
+    navigate(pathAfterLogin(), { replace: true })
   }
 
   return (
@@ -38,7 +38,7 @@ export function LoginPage() {
       </Link>
       <h1 className="mt-6 text-[1.85rem] font-extrabold tracking-tight">Log in</h1>
       <p className="mt-2 text-sm leading-6 text-mute">
-        For MAKAUT students who are 18 or older.
+        Use the email and password from your account.
       </p>
       <form className="mt-6 grid gap-4" onSubmit={onSubmit}>
         <TextField
