@@ -74,11 +74,6 @@ export function createAccountWithProof(account: StudentAccount, screenshot: stri
   }
 }
 
-export function saveAccount(account: StudentAccount) {
-  localStorage.setItem(accountKey, JSON.stringify(account))
-  localStorage.setItem(sessionKey, account.email)
-}
-
 export function updateAccountStatus(status: VerificationStatus, reviewNote: string) {
   const account = readAccount()
   if (!account) return false
