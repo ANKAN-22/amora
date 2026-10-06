@@ -1,12 +1,14 @@
 import { type FormEvent, useState } from 'react'
-import { Link, Navigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/Button.tsx'
 import { TextField } from '@/components/TextField.tsx'
 import { usePageTitle } from '@/hooks/usePageTitle.ts'
+import { hasSession, login } from '@/lib/account.ts'
 import { readAgeChoice } from '@/lib/ageGate.ts'
 
 export function LoginPage() {
   usePageTitle('Log in')
+  const navigate = useNavigate()
   const choice = readAgeChoice()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -14,6 +16,7 @@ export function LoginPage() {
 
   if (choice === 'no') return <Navigate to="/exit" replace />
   if (choice !== 'yes') return <Navigate to="/" replace />
+  if (hasSession()) return <Navigate to="/verify" replace />
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -21,7 +24,11 @@ export function LoginPage() {
       setNotice('Enter your email and a password of at least 8 characters.')
       return
     }
-    setNotice('Sign-in opens once accounts are connected.')
+    if (!login(email, password)) {
+      setNotice('That email and password don’t match.')
+      return
+    }
+    navigate('/verify', { replace: true })
   }
 
   return (
@@ -52,7 +59,11 @@ export function LoginPage() {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
-        {notice ? <p className="text-sm leading-5 text-mute">{notice}</p> : null}
+        {notice ? (
+          <p className="text-sm leading-5 text-coral-deep" role="alert">
+            {notice}
+          </p>
+        ) : null}
         <Button type="submit" fullWidth>
           Log in
         </Button>
