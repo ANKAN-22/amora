@@ -3,11 +3,19 @@ import { BottomNav } from '@/components/BottomNav.tsx'
 import { BrandMark } from '@/components/BrandMark.tsx'
 import { PhoneFrame } from '@/layouts/PhoneFrame.tsx'
 import { hasSession, readAccount } from '@/lib/account.ts'
+import { profileProgress, readProfile } from '@/lib/profile.ts'
 
 export function AppShell() {
   const account = readAccount()
   if (hasSession() && account && account.verificationStatus !== 'APPROVED') {
     return <Navigate to="/verify" replace />
+  }
+
+  if (hasSession() && account?.verificationStatus === 'APPROVED') {
+    const profile = readProfile()
+    if (!profile || !profileProgress(profile).complete) {
+      return <Navigate to="/profile-setup" replace />
+    }
   }
 
   return (

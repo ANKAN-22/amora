@@ -1,3 +1,5 @@
+import { profileProgress, readProfile } from '@/lib/profile.ts'
+
 const accountKey = 'amora.account'
 const sessionKey = 'amora.session'
 const verificationKey = 'amora.verification'
@@ -126,8 +128,10 @@ export function readVerification(): VerificationRequest | null {
 
 export function pathAfterLogin() {
   const account = readAccount()
-  if (account?.verificationStatus === 'APPROVED') return '/discover'
-  return '/verify'
+  if (account?.verificationStatus !== 'APPROVED') return '/verify'
+  const profile = readProfile()
+  if (!profile || !profileProgress(profile).complete) return '/profile-setup'
+  return '/discover'
 }
 
 export function submitEnrollmentProof(screenshot: string) {

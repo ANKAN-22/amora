@@ -9,6 +9,7 @@ import { LikesPage } from '@/pages/LikesPage.tsx'
 import { LoginPage } from '@/pages/LoginPage.tsx'
 import { MatchesPage } from '@/pages/MatchesPage.tsx'
 import { ProfilePage } from '@/pages/ProfilePage.tsx'
+import { ProfileSetupPage } from '@/pages/ProfileSetupPage.tsx'
 import { RegisterPage } from '@/pages/RegisterPage.tsx'
 import { VerifyQueuePage } from '@/pages/VerifyQueuePage.tsx'
 
@@ -22,6 +23,7 @@ export function AppRoutes() {
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
         <Route path="verify" element={<VerifyQueuePage />} />
+        <Route path="profile-setup" element={<ProfileSetupPage />} />
       </Route>
       <Route element={<AppShell />}>
         <Route path="discover" element={<DiscoverPage />} />

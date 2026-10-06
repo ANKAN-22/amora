@@ -9,6 +9,7 @@ import {
   type VerificationStatus,
   clearSession,
   hasSession,
+  pathAfterLogin,
   readAccount,
   readVerification,
   submitEnrollmentProof,
@@ -66,7 +67,7 @@ export function VerifyQueuePage() {
       proof={proof}
       onAction={() => {
         if (account.verificationStatus === 'APPROVED') {
-          navigate('/discover')
+          navigate(pathAfterLogin())
           return
         }
         setEditing(true)
