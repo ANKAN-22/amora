@@ -5,7 +5,7 @@ import { ScreenshotField } from '@/components/ScreenshotField.tsx'
 import { SelectField } from '@/components/SelectField.tsx'
 import { TextField } from '@/components/TextField.tsx'
 import { usePageTitle } from '@/hooks/usePageTitle.ts'
-import { createAccountWithProof, hasSession, pathAfterLogin, readAccount } from '@/lib/account.ts'
+import { createAccountWithProof, hasSession, pathAfterLogin } from '@/lib/account.ts'
 import { readAgeChoice, saveAgeChoice } from '@/lib/ageGate.ts'
 import { compressImage } from '@/lib/image.ts'
 
@@ -66,12 +66,6 @@ export function RegisterPage() {
       return
     }
 
-    const existing = readAccount()
-    if (existing && existing.email.toLowerCase() !== email.trim().toLowerCase()) {
-      setNotice('This browser already has an Amora account. Log in with that email.')
-      return
-    }
-
     setNotice('')
     setStep(2)
   }
@@ -114,34 +108,26 @@ export function RegisterPage() {
     }
   }
 
-  function onProof(event: FormEvent<HTMLFormElement>) {
+  async function onProof(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!preview) {
       setNotice('Upload a screenshot of your current enrollment.')
       return
     }
 
-    const existing = readAccount()
-    if (existing && existing.email.toLowerCase() !== email.trim().toLowerCase()) {
-      setNotice('This browser already has an Amora account. Log in with that email.')
-      return
-    }
-
-    const saved = createAccountWithProof(
-      {
-        name: name.trim(),
-        age: Number(age),
-        email: email.trim(),
-        password,
-        department: department.trim(),
-        year,
-        studentId: studentId.trim(),
-        verificationStatus: 'PENDING',
-      },
-      preview,
-    )
-    if (!saved) {
-      setNotice('That screenshot is too large. Try a smaller image.')
+    setNotice('')
+    const message = await createAccountWithProof({
+      name: name.trim(),
+      age: Number(age),
+      email: email.trim(),
+      password,
+      department: department.trim(),
+      year,
+      studentId: studentId.trim(),
+      screenshot: preview,
+    })
+    if (message) {
+      setNotice(message)
       return
     }
     navigate('/verify', { replace: true })

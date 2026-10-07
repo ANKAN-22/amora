@@ -4,9 +4,8 @@ import { Button } from '@/components/Button.tsx'
 import { Card } from '@/components/Card.tsx'
 import { PageHeading } from '@/components/PageHeading.tsx'
 import { StudentAvatar } from '@/components/StudentAvatar.tsx'
-import { studentById } from '@/data/students.ts'
 import { usePageTitle } from '@/hooks/usePageTitle.ts'
-import { lastMessage, useSocial, visibleMatches } from '@/lib/social.ts'
+import { lastMessage, personById, useSocial, visibleMatches } from '@/lib/social.ts'
 
 function shortTime(iso: string) {
   const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60000)
@@ -43,7 +42,7 @@ export function MatchesPage() {
       ) : (
         <ul className="mt-5 grid gap-3">
           {matches.map((match) => {
-            const student = studentById(match.studentId)
+            const student = personById(match.studentId)
             if (!student) return null
             const preview = lastMessage(match.id, social)
             return (

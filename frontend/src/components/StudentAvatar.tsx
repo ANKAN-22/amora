@@ -1,11 +1,14 @@
-import type { CampusStudent } from '@/data/students.ts'
-
 type StudentAvatarProps = {
-  student: CampusStudent
+  student: { name: string; background: string; photoUrls?: string[] }
   className?: string
 }
 
 export function StudentAvatar({ student, className = '' }: StudentAvatarProps) {
+  const photo = student.photoUrls?.[0]
+  if (photo) {
+    return <img src={photo} alt="" className={`shrink-0 rounded-full object-cover ${className}`} />
+  }
+
   return (
     <span
       aria-hidden="true"

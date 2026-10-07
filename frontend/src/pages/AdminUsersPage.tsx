@@ -1,58 +1,63 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/Button.tsx'
 import { ScreenHeader } from '@/components/ScreenHeader.tsx'
 import { usePageTitle } from '@/hooks/usePageTitle.ts'
-import { readAccount, statusLabel, updateAccountStatus } from '@/lib/account.ts'
+import { statusLabel } from '@/lib/account.ts'
+import { listStudents, setStudentStatus, type ReviewStudent } from '@/lib/review.ts'
 
 export function AdminUsersPage() {
   usePageTitle('Users')
-  const [revision, setRevision] = useState(0)
-  const account = readAccount()
+  const [students, setStudents] = useState<ReviewStudent[]>([])
 
-  function suspend() {
-    updateAccountStatus('SUSPENDED', 'You can’t use Amora while this account is suspended.')
-    setRevision(revision + 1)
+  async function load() {
+    setStudents(await listStudents())
   }
 
-  function restore() {
-    updateAccountStatus('APPROVED', '')
-    setRevision(revision + 1)
+  useEffect(() => {
+    void load()
+  }, [])
+
+  async function suspend(student: ReviewStudent) {
+    await setStudentStatus(student.id, 'SUSPENDED', 'You can’t use Amora while this account is suspended.')
+    await load()
+  }
+
+  async function restore(student: ReviewStudent) {
+    await setStudentStatus(student.id, 'APPROVED', '')
+    await load()
   }
 
   return (
     <div className="px-5 pt-4 pb-8">
-      <ScreenHeader backTo="/admin" title="Users" subtitle="The one student account on this browser." />
-      {!account ? (
-        <p className="mt-5 text-sm leading-5 text-mute">
-          No student account yet.{' '}
-          <Link to="/register" className="font-semibold text-coral">
-            Create one
-          </Link>{' '}
-          from the student app.
-        </p>
+      <ScreenHeader backTo="/admin" title="Users" subtitle="Every student account." />
+      {students.length === 0 ? (
+        <p className="mt-5 text-sm leading-5 text-mute">No student accounts yet.</p>
       ) : (
-        <article className="mt-5 rounded-[1.6rem] bg-white px-4 py-4 shadow-card ring-1 ring-black/[0.04]">
-          <p className="text-lg font-extrabold">{account.name}</p>
-          <p className="mt-1 text-sm text-mute">{account.email}</p>
-          <p className="mt-1 text-sm text-mute">
-            {account.department} · {account.year}
-            {account.age ? ` · ${account.age}` : ''}
-          </p>
-          <p className="mt-1 text-sm text-mute">Student ID {account.studentId || 'not added'}</p>
-          <p className="mt-3 inline-flex rounded-full bg-blush px-3 py-1 text-xs font-bold text-coral">
-            {statusLabel(account.verificationStatus)}
-          </p>
-          {account.verificationStatus === 'SUSPENDED' ? (
-            <Button fullWidth className="mt-4" onClick={restore}>
-              Restore access
-            </Button>
-          ) : (
-            <Button fullWidth className="mt-4" variant="secondary" onClick={suspend}>
-              Suspend
-            </Button>
-          )}
-        </article>
+        <div className="mt-5 grid gap-3">
+          {students.map((student) => (
+            <article key={student.id} className="rounded-[1.6rem] bg-white px-4 py-4 shadow-card ring-1 ring-black/[0.04]">
+              <p className="text-lg font-extrabold">{student.name}</p>
+              <p className="mt-1 text-sm text-mute">{student.email}</p>
+              <p className="mt-1 text-sm text-mute">
+                {student.department} · {student.year}
+                {student.age ? ` · ${student.age}` : ''}
+              </p>
+              <p className="mt-1 text-sm text-mute">Student ID {student.studentId || 'not added'}</p>
+              <p className="mt-3 inline-flex rounded-full bg-blush px-3 py-1 text-xs font-bold text-coral">
+                {statusLabel(student.verificationStatus)}
+              </p>
+              {student.verificationStatus === 'SUSPENDED' ? (
+                <Button fullWidth className="mt-4" onClick={() => restore(student)}>
+                  Restore access
+                </Button>
+              ) : (
+                <Button fullWidth className="mt-4" variant="secondary" onClick={() => suspend(student)}>
+                  Suspend
+                </Button>
+              )}
+            </article>
+          ))}
+        </div>
       )}
     </div>
   )

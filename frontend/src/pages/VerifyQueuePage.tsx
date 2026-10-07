@@ -8,11 +8,9 @@ import {
   type VerificationRequest,
   type VerificationStatus,
   clearSession,
-  hasSession,
   pathAfterLogin,
-  readAccount,
-  readVerification,
   submitEnrollmentProof,
+  useSession,
 } from '@/lib/account.ts'
 import { compressImage } from '@/lib/image.ts'
 
@@ -27,35 +25,29 @@ const statusLabel: Record<VerificationStatus, string> = {
 export function VerifyQueuePage() {
   usePageTitle('Verification')
   const navigate = useNavigate()
-  const [account, setAccount] = useState(readAccount)
-  const [proof, setProof] = useState(readVerification)
+  const session = useSession()
+  const account = session.account
+  const proof = session.verification
   const [editing, setEditing] = useState(false)
 
-  if (!hasSession() || !account) return <Navigate to="/login" replace />
+  if (!account) return <Navigate to="/login" replace />
 
   const canRevise =
     account.verificationStatus === 'REJECTED' || account.verificationStatus === 'RESUBMISSION_REQUIRED'
   const showForm =
-    (account.verificationStatus === 'PENDING' && !proof) || (editing && canRevise)
+    (account.verificationStatus === 'PENDING' && !proof?.screenshot) || (editing && canRevise)
 
   function logOut() {
-    clearSession()
-    navigate('/')
-  }
-
-  function refresh() {
-    setAccount(readAccount())
-    setProof(readVerification())
-    setEditing(false)
+    void clearSession().then(() => navigate('/'))
   }
 
   if (showForm) {
     return (
       <ProofForm
         initialPreview={proof?.screenshot ?? ''}
-        retrying={Boolean(proof)}
-        onCancel={proof ? () => setEditing(false) : undefined}
-        onSubmitted={refresh}
+        retrying={Boolean(proof?.screenshot)}
+        onCancel={proof?.screenshot ? () => setEditing(false) : undefined}
+        onSubmitted={() => setEditing(false)}
         onLogOut={logOut}
       />
     )
@@ -110,16 +102,20 @@ function ProofForm({
     }
   }
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!preview) {
       setNotice('Upload a screenshot of your current enrollment.')
       return
     }
+    if (preview.startsWith('http')) {
+      setNotice('Choose a new screenshot to submit.')
+      return
+    }
 
-    const saved = submitEnrollmentProof(preview)
-    if (!saved) {
-      setNotice('That screenshot is too large. Try a smaller image.')
+    const message = await submitEnrollmentProof(preview)
+    if (message) {
+      setNotice(message)
       return
     }
     onSubmitted()

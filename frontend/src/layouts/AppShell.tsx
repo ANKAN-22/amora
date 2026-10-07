@@ -2,13 +2,14 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { BottomNav } from '@/components/BottomNav.tsx'
 import { BrandMark } from '@/components/BrandMark.tsx'
 import { PhoneFrame } from '@/layouts/PhoneFrame.tsx'
-import { hasSession, readAccount } from '@/lib/account.ts'
-import { profileProgress, readProfile } from '@/lib/profile.ts'
+import { useSession } from '@/lib/account.ts'
+import { profileProgress } from '@/lib/profile.ts'
 
 export function AppShell() {
   const { pathname } = useLocation()
-  const account = readAccount()
-  if (!hasSession() || !account) {
+  const session = useSession()
+  const account = session.account
+  if (!account) {
     return <Navigate to="/login" replace />
   }
 
@@ -16,8 +17,7 @@ export function AppShell() {
     return <Navigate to="/verify" replace />
   }
 
-  const profile = readProfile()
-  if (!profile || !profileProgress(profile).complete) {
+  if (!session.profile || !profileProgress(session.profile).complete) {
     return <Navigate to="/profile-setup" replace />
   }
 

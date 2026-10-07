@@ -4,13 +4,13 @@ import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { Button } from '@/components/Button.tsx'
 import { ReportReasonList } from '@/components/ReportReasonList.tsx'
 import { Sheet } from '@/components/Sheet.tsx'
-import { studentById } from '@/data/students.ts'
 import { usePageTitle } from '@/hooks/usePageTitle.ts'
 import {
   blockStudent,
   deleteConversation,
   markMatchSeen,
   messagesFor,
+  personById,
   reportStudent,
   sendMessage,
   unmatch,
@@ -25,7 +25,7 @@ export function ChatPage() {
   const navigate = useNavigate()
   const social = useSocial()
   const match = social.matches.find((item) => item.id === matchId) ?? null
-  const student = match ? studentById(match.studentId) : null
+  const student = match ? personById(match.studentId) : null
   usePageTitle(student ? student.name : 'Chat')
 
   const [draft, setDraft] = useState('')
@@ -42,12 +42,14 @@ export function ChatPage() {
     endRef.current?.scrollIntoView({ block: 'end' })
   }, [messages.length])
 
+  if (!social.ready) return <p className="px-5 pt-8 text-sm text-mute">Loading…</p>
+
   if (!match || !student || social.blocks.includes(student.id)) {
     return <Navigate to="/matches" replace />
   }
 
-  function submitMessage() {
-    if (sendMessage(matchId, draft)) setDraft('')
+  async function submitMessage() {
+    if (await sendMessage(matchId, draft)) setDraft('')
   }
 
   function fileReport(reason: ReportReason) {
@@ -176,7 +178,7 @@ export function ChatPage() {
 
       {sheet === 'saved' ? (
         <Sheet title="Report saved" onClose={() => setSheet(null)}>
-          <p className="text-sm leading-5 text-mute">It’s stored with your account on this browser.</p>
+          <p className="text-sm leading-5 text-mute">A reviewer can see this report.</p>
           <Button fullWidth className="mt-4" onClick={() => setSheet(null)}>
             Done
           </Button>

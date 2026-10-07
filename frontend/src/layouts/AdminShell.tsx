@@ -1,14 +1,22 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { PhoneFrame } from '@/layouts/PhoneFrame.tsx'
-import { hasAdminSession } from '@/lib/admin.ts'
+import { useAdmin } from '@/lib/admin.ts'
 
 export function AdminShell() {
   const { pathname } = useLocation()
-  const authed = hasAdminSession()
+  const admin = useAdmin()
   const loginPath = pathname === '/admin/login'
 
-  if (!authed && !loginPath) return <Navigate to="/admin/login" replace />
-  if (authed && loginPath) return <Navigate to="/admin" replace />
+  if (!admin.ready) {
+    return (
+      <PhoneFrame>
+        <p className="px-6 py-10 text-sm text-mute">Loading…</p>
+      </PhoneFrame>
+    )
+  }
+
+  if (!admin.authed && !loginPath) return <Navigate to="/admin/login" replace />
+  if (admin.authed && loginPath) return <Navigate to="/admin" replace />
 
   return (
     <PhoneFrame>

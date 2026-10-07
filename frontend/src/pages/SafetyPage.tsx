@@ -1,8 +1,7 @@
-import { studentById } from '@/data/students.ts'
 import { ScreenHeader } from '@/components/ScreenHeader.tsx'
 import { StudentAvatar } from '@/components/StudentAvatar.tsx'
 import { usePageTitle } from '@/hooks/usePageTitle.ts'
-import { unblockStudent, unhideStudent, useSocial } from '@/lib/social.ts'
+import { personById, unblockStudent, unhideStudent, useSocial } from '@/lib/social.ts'
 
 function PersonRow({
   name,
@@ -17,7 +16,7 @@ function PersonRow({
   onAction: () => void
   studentId: string
 }) {
-  const student = studentById(studentId)
+  const student = personById(studentId)
   return (
     <li className="flex items-center gap-3 rounded-[1.4rem] bg-white p-3 shadow-card ring-1 ring-black/[0.04]">
       {student ? <StudentAvatar student={student} className="size-12 text-lg" /> : null}
@@ -35,8 +34,8 @@ function PersonRow({
 export function SafetyPage() {
   usePageTitle('Safety')
   const social = useSocial()
-  const blocked = social.blocks.map((id) => studentById(id)).filter((student) => student !== null)
-  const hidden = social.hidden.map((id) => studentById(id)).filter((student) => student !== null)
+  const blocked = social.blocks.map((id) => personById(id)).filter((student) => student !== null)
+  const hidden = social.hidden.map((id) => personById(id)).filter((student) => student !== null)
   const reports = [...social.reports].reverse()
 
   return (
@@ -44,7 +43,7 @@ export function SafetyPage() {
       <ScreenHeader
         backTo="/profile"
         title="Safety"
-        subtitle="Block, hide, and the reports saved on this browser."
+        subtitle="Block, hide, and the reports on your account."
       />
 
       <section className="mt-6">
@@ -93,12 +92,12 @@ export function SafetyPage() {
         <h2 className="text-sm font-bold tracking-wide text-mute uppercase">Reports</h2>
         {reports.length === 0 ? (
           <p className="mt-2 text-sm leading-5 text-mute">
-            Report someone from their profile or from a chat. A reviewer can see these once the admin queue exists.
+            Report someone from their profile or from a chat. A reviewer can see these in the admin queue.
           </p>
         ) : (
           <ul className="mt-3 grid gap-3">
             {reports.map((report) => {
-              const student = studentById(report.studentId)
+              const student = personById(report.studentId)
               return (
                 <li key={report.id} className="rounded-[1.4rem] bg-white px-4 py-3 shadow-card ring-1 ring-black/[0.04]">
                   <p className="font-bold">{student?.name ?? 'Student'}</p>

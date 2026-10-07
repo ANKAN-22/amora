@@ -9,7 +9,7 @@ export function NotificationsPage() {
 
   return (
     <div className="px-5 pt-4 pb-8">
-      <ScreenHeader backTo="/settings" title="Notifications" subtitle="Saved on this browser." />
+      <ScreenHeader backTo="/settings" title="Notifications" subtitle="These follow your account." />
       <div className="mt-5 grid gap-3">
         <Toggle
           checked={settings.notifyLikes}

@@ -1,8 +1,8 @@
 import { useSyncExternalStore } from 'react'
-import { campusStudents, studentById, type CampusStudent } from '@/data/students.ts'
-import type { StudentProfile } from '@/lib/profile.ts'
-
-const socialKey = 'amora.social'
+import { getSession, subscribeSession } from '@/lib/account.ts'
+import { backgroundFor, type Person } from '@/lib/people.ts'
+import { profileFromParts, profileProgress, promptsFrom, type StudentProfile } from '@/lib/profile.ts'
+import { supabase } from '@/lib/supabase.ts'
 
 export const reportReasons = [
   'Harassment',
@@ -21,6 +21,7 @@ export type Match = {
   studentId: string
   createdAt: string
   seen: boolean
+  iAmUserA: boolean
 }
 
 export type ChatMessage = {
@@ -42,13 +43,18 @@ export type Report = {
 }
 
 export type SocialState = {
+  ready: boolean
   passed: string[]
   liked: string[]
+  incoming: string[]
   matches: Match[]
   messages: ChatMessage[]
   blocks: string[]
+  blockedBy: string[]
   hidden: string[]
   reports: Report[]
+  people: Record<string, Person>
+  directory: Person[]
 }
 
 export type LikeResult = {
@@ -56,89 +62,50 @@ export type LikeResult = {
   matchId: string | null
 }
 
-const emptyState = (): SocialState => ({
+type DirectoryRow = {
+  id: string
+  name: string
+  age: number
+  department: string
+  year: string
+  bio: string
+  prompts: unknown
+  interests: string[] | null
+  gender: string
+  looking_for: string
+  age_min: number
+  age_max: number
+  photo_paths: string[] | null
+  verification_status: string
+}
+
+const emptyState = (ready: boolean): SocialState => ({
+  ready,
   passed: [],
   liked: [],
+  incoming: [],
   matches: [],
   messages: [],
   blocks: [],
+  blockedBy: [],
   hidden: [],
   reports: [],
+  people: {},
+  directory: [],
 })
 
-function strings(value: unknown) {
-  return Array.isArray(value) ? value.filter((item) => typeof item === 'string') : []
-}
-
-function isMatch(value: unknown): value is Match {
-  if (!value || typeof value !== 'object') return false
-  const match = value as Partial<Match>
-  return (
-    typeof match.id === 'string' &&
-    typeof match.studentId === 'string' &&
-    typeof match.createdAt === 'string' &&
-    typeof match.seen === 'boolean'
-  )
-}
-
-function isMessage(value: unknown): value is ChatMessage {
-  if (!value || typeof value !== 'object') return false
-  const message = value as Partial<ChatMessage>
-  return (
-    typeof message.id === 'string' &&
-    typeof message.matchId === 'string' &&
-    (message.from === 'me' || message.from === 'them') &&
-    typeof message.text === 'string' &&
-    typeof message.createdAt === 'string'
-  )
-}
-
-function isReport(value: unknown): value is Omit<Report, 'resolved'> & { resolved?: boolean } {
-  if (!value || typeof value !== 'object') return false
-  const report = value as Partial<Report>
-  return (
-    typeof report.id === 'string' &&
-    typeof report.studentId === 'string' &&
-    typeof report.matchId === 'string' &&
-    typeof report.messageId === 'string' &&
-    typeof report.reason === 'string' &&
-    reportReasons.includes(report.reason as ReportReason) &&
-    typeof report.createdAt === 'string'
-  )
-}
-
-function load(): SocialState {
-  try {
-    const raw = localStorage.getItem(socialKey)
-    if (!raw) return emptyState()
-    const parsed = JSON.parse(raw) as Partial<SocialState>
-    return {
-      passed: strings(parsed.passed),
-      liked: strings(parsed.liked),
-      blocks: strings(parsed.blocks),
-      hidden: strings(parsed.hidden),
-      matches: Array.isArray(parsed.matches) ? parsed.matches.filter(isMatch) : [],
-      messages: Array.isArray(parsed.messages) ? parsed.messages.filter(isMessage) : [],
-      reports: Array.isArray(parsed.reports)
-        ? parsed.reports.filter(isReport).map((report) => ({ ...report, resolved: report.resolved === true }))
-        : [],
-    }
-  } catch {
-    return emptyState()
-  }
-}
-
-let state = load()
+let state = emptyState(false)
 const listeners = new Set<() => void>()
+let reloadTimer: ReturnType<typeof setTimeout> | null = null
+let listening = false
+
+function emit() {
+  for (const listener of listeners) listener()
+}
 
 function commit(next: SocialState) {
   state = next
-  try {
-    localStorage.setItem(socialKey, JSON.stringify(next))
-  } catch {
-    // The screen still updates if this browser refuses the write.
-  }
-  for (const listener of listeners) listener()
+  emit()
 }
 
 export function subscribeSocial(listener: () => void) {
@@ -154,7 +121,11 @@ export function useSocial() {
   return useSyncExternalStore(subscribeSocial, getSocial, getSocial)
 }
 
-export function fitsPreferences(student: CampusStudent, profile: StudentProfile) {
+export function personById(id: string) {
+  return state.people[id] ?? null
+}
+
+export function fitsPreferences(student: Person, profile: StudentProfile) {
   if (student.age < profile.ageMin || student.age > profile.ageMax) return false
   if (profile.lookingFor === 'Women') return student.gender === 'Woman'
   if (profile.lookingFor === 'Men') return student.gender === 'Man'
@@ -165,9 +136,10 @@ export function isMatched(studentId: string, social: SocialState = state) {
   return social.matches.some((match) => match.studentId === studentId)
 }
 
-export function isOpen(student: CampusStudent, social: SocialState = state) {
+export function isOpen(student: Person, social: SocialState = state) {
   return (
     !social.blocks.includes(student.id) &&
+    !social.blockedBy.includes(student.id) &&
     !social.hidden.includes(student.id) &&
     !social.passed.includes(student.id) &&
     !social.liked.includes(student.id) &&
@@ -176,178 +148,24 @@ export function isOpen(student: CampusStudent, social: SocialState = state) {
 }
 
 export function incomingLikes(social: SocialState = state) {
-  return campusStudents.filter(
-    (student) => student.likedYou && !social.blocks.includes(student.id) && !isMatched(student.id, social),
-  )
+  return social.incoming
+    .map((id) => social.people[id])
+    .filter((student): student is Person => {
+      return !!student && !social.blocks.includes(student.id) && !social.blockedBy.includes(student.id) && !isMatched(student.id, social)
+    })
 }
 
 export function outgoingLikes(social: SocialState = state) {
   return social.liked
-    .map((id) => studentById(id))
-    .filter((student): student is CampusStudent => {
-      return student !== null && !social.blocks.includes(student.id) && !isMatched(student.id, social)
+    .map((id) => social.people[id])
+    .filter((student): student is Person => {
+      return !!student && !social.blocks.includes(student.id) && !isMatched(student.id, social)
     })
 }
 
 export function visibleMatches(social: SocialState = state) {
   return social.matches.filter((match) => {
-    const student = studentById(match.studentId)
-    return student !== null && !social.blocks.includes(student.id)
-  })
-}
-
-export function passStudent(studentId: string) {
-  if (state.blocks.includes(studentId) || state.passed.includes(studentId) || isMatched(studentId)) return
-  commit({ ...state, passed: [...state.passed, studentId] })
-}
-
-export function likeStudent(studentId: string): LikeResult {
-  const student = studentById(studentId)
-  if (!student || state.blocks.includes(studentId)) return { matched: false, matchId: null }
-
-  const existing = state.matches.find((match) => match.studentId === studentId)
-  if (existing) return { matched: true, matchId: existing.id }
-
-  const liked = state.liked.includes(studentId) ? state.liked : [...state.liked, studentId]
-  const passed = state.passed.filter((id) => id !== studentId)
-  const hidden = state.hidden.filter((id) => id !== studentId)
-  const mutual = student.likedYou || student.likesBack
-
-  if (!mutual) {
-    commit({ ...state, liked, passed, hidden })
-    return { matched: false, matchId: null }
-  }
-
-  const matchId = crypto.randomUUID()
-  const createdAt = new Date().toISOString()
-  commit({
-    ...state,
-    liked,
-    passed,
-    hidden,
-    matches: [{ id: matchId, studentId, createdAt, seen: false }, ...state.matches],
-    messages: [
-      ...state.messages,
-      {
-        id: crypto.randomUUID(),
-        matchId,
-        from: 'them',
-        text: student.hello,
-        createdAt,
-      },
-    ],
-  })
-  return { matched: true, matchId }
-}
-
-export function markMatchSeen(matchId: string) {
-  if (!state.matches.some((match) => match.id === matchId && !match.seen)) return
-  commit({
-    ...state,
-    matches: state.matches.map((match) => (match.id === matchId ? { ...match, seen: true } : match)),
-  })
-}
-
-export function sendMessage(matchId: string, text: string) {
-  const trimmed = text.trim()
-  if (!trimmed || trimmed.length > 500) return false
-  const match = state.matches.find((item) => item.id === matchId)
-  if (!match || state.blocks.includes(match.studentId)) return false
-  commit({
-    ...state,
-    messages: [
-      ...state.messages,
-      {
-        id: crypto.randomUUID(),
-        matchId,
-        from: 'me',
-        text: trimmed,
-        createdAt: new Date().toISOString(),
-      },
-    ],
-  })
-  return true
-}
-
-export function deleteConversation(matchId: string) {
-  commit({
-    ...state,
-    messages: state.messages.filter((message) => message.matchId !== matchId),
-  })
-}
-
-export function unmatch(matchId: string) {
-  const match = state.matches.find((item) => item.id === matchId)
-  if (!match) return
-  commit({
-    ...state,
-    matches: state.matches.filter((item) => item.id !== matchId),
-    messages: state.messages.filter((message) => message.matchId !== matchId),
-    liked: state.liked.filter((id) => id !== match.studentId),
-  })
-}
-
-export function blockStudent(studentId: string) {
-  const removed = new Set(
-    state.matches.filter((match) => match.studentId === studentId).map((match) => match.id),
-  )
-  commit({
-    ...state,
-    blocks: state.blocks.includes(studentId) ? state.blocks : [...state.blocks, studentId],
-    hidden: state.hidden.filter((id) => id !== studentId),
-    matches: state.matches.filter((match) => match.studentId !== studentId),
-    messages: state.messages.filter((message) => !removed.has(message.matchId)),
-    liked: state.liked.filter((id) => id !== studentId),
-  })
-}
-
-export function unblockStudent(studentId: string) {
-  if (!state.blocks.includes(studentId)) return
-  commit({ ...state, blocks: state.blocks.filter((id) => id !== studentId) })
-}
-
-export function hideStudent(studentId: string) {
-  if (state.blocks.includes(studentId) || state.hidden.includes(studentId)) return
-  commit({ ...state, hidden: [...state.hidden, studentId] })
-}
-
-export function unhideStudent(studentId: string) {
-  if (!state.hidden.includes(studentId)) return
-  commit({ ...state, hidden: state.hidden.filter((id) => id !== studentId) })
-}
-
-export function clearSocial() {
-  commit(emptyState())
-}
-
-export function reportStudent(input: {
-  studentId: string
-  matchId: string
-  messageId?: string
-  reason: ReportReason
-}) {
-  commit({
-    ...state,
-    reports: [
-      ...state.reports,
-      {
-        id: crypto.randomUUID(),
-        studentId: input.studentId,
-        matchId: input.matchId,
-        messageId: input.messageId ?? '',
-        reason: input.reason,
-        createdAt: new Date().toISOString(),
-        resolved: false,
-      },
-    ],
-  })
-}
-
-export function markReportReviewed(id: string) {
-  if (!state.reports.some((report) => report.id === id && !report.resolved)) return
-  commit({
-    ...state,
-    reports: state.reports.map((report) => (report.id === id ? { ...report, resolved: true } : report)),
+    return social.people[match.studentId] && !social.blocks.includes(match.studentId) && !social.blockedBy.includes(match.studentId)
   })
 }
 
@@ -358,4 +176,298 @@ export function messagesFor(matchId: string, social: SocialState = state) {
 export function lastMessage(matchId: string, social: SocialState = state) {
   const thread = messagesFor(matchId, social)
   return thread.length > 0 ? thread[thread.length - 1] : null
+}
+
+function isReason(value: string): value is ReportReason {
+  return reportReasons.includes(value as ReportReason)
+}
+
+async function signedPhotos(paths: string[]) {
+  const map: Record<string, string> = {}
+  if (!supabase || paths.length === 0) return map
+  const { data } = await supabase.storage.from('photos').createSignedUrls(paths, 60 * 60)
+  for (const item of data ?? []) {
+    if (item.path && item.signedUrl) map[item.path] = item.signedUrl
+  }
+  return map
+}
+
+function personFrom(row: DirectoryRow, photos: Record<string, string>): Person {
+  const paths = row.photo_paths ?? []
+  return {
+    id: row.id,
+    name: row.name || 'Student',
+    age: row.age,
+    gender: row.gender,
+    department: row.department,
+    year: row.year,
+    bio: row.bio,
+    interests: row.interests ?? [],
+    prompts: promptsFrom(row.prompts),
+    photoUrls: paths.map((path) => photos[path]).filter((url): url is string => Boolean(url)),
+    background: backgroundFor(row.id),
+    verificationStatus: row.verification_status,
+  }
+}
+
+export async function reloadSocial() {
+  const me = getSession().userId
+  if (!supabase || !me) {
+    commit(emptyState(true))
+    return
+  }
+
+  const [directoryResult, likesResult, passesResult, hidesResult, blocksResult, matchesResult, reportsResult] = await Promise.all([
+    supabase.from('directory').select('*'),
+    supabase.from('likes').select('from_id, to_id').or(`from_id.eq.${me},to_id.eq.${me}`),
+    supabase.from('passes').select('to_id').eq('from_id', me),
+    supabase.from('hides').select('hidden_id').eq('user_id', me),
+    supabase.from('blocks').select('blocker_id, blocked_id').or(`blocker_id.eq.${me},blocked_id.eq.${me}`),
+    supabase.from('matches').select('*').or(`user_a.eq.${me},user_b.eq.${me}`),
+    supabase.from('reports').select('*').eq('reporter_id', me),
+  ])
+
+  const directoryRows = (directoryResult.data ?? []) as DirectoryRow[]
+  const likeRows = (likesResult.data ?? []) as { from_id: string; to_id: string }[]
+  const passRows = (passesResult.data ?? []) as { to_id: string }[]
+  const hideRows = (hidesResult.data ?? []) as { hidden_id: string }[]
+  const blockRows = (blocksResult.data ?? []) as { blocker_id: string; blocked_id: string }[]
+  const matchRows = (matchesResult.data ?? []) as {
+    id: string
+    user_a: string
+    user_b: string
+    created_at: string
+    seen_a: boolean
+    seen_b: boolean
+  }[]
+  const reportRows = (reportsResult.data ?? []) as {
+    id: string
+    target_id: string
+    match_id: string | null
+    message_id: string | null
+    reason: string
+    created_at: string
+    resolved: boolean
+  }[]
+
+  const matchIds = matchRows.map((match) => match.id)
+  const messageResult = matchIds.length
+    ? await supabase.from('messages').select('*').in('match_id', matchIds).order('created_at', { ascending: true })
+    : { data: [] }
+  const messageRows = (messageResult.data ?? []) as {
+    id: string
+    match_id: string
+    sender_id: string
+    body: string
+    created_at: string
+  }[]
+
+  const photoPaths = directoryRows.flatMap((row) => row.photo_paths ?? [])
+  const photos = await signedPhotos(photoPaths)
+  const people: Record<string, Person> = {}
+  const directory: Person[] = []
+
+  for (const row of directoryRows) {
+    const person = personFrom(row, photos)
+    people[person.id] = person
+    const card = profileFromParts({
+      photoPaths: row.photo_paths ?? [],
+      photos: row.photo_paths ?? [],
+      bio: row.bio,
+      prompts: row.prompts,
+      interests: row.interests ?? [],
+      department: row.department,
+      year: row.year,
+      gender: row.gender,
+      ageMin: row.age_min,
+      ageMax: row.age_max,
+      lookingFor: row.looking_for,
+    })
+    if (row.id !== me && row.verification_status === 'APPROVED' && profileProgress(card).complete) {
+      directory.push(person)
+    }
+  }
+
+  commit({
+    ready: true,
+    passed: passRows.map((row) => row.to_id),
+    liked: likeRows.filter((row) => row.from_id === me).map((row) => row.to_id),
+    incoming: likeRows.filter((row) => row.to_id === me).map((row) => row.from_id),
+    matches: matchRows.map((match) => ({
+      id: match.id,
+      studentId: match.user_a === me ? match.user_b : match.user_a,
+      createdAt: match.created_at,
+      seen: match.user_a === me ? match.seen_a : match.seen_b,
+      iAmUserA: match.user_a === me,
+    })),
+    messages: messageRows.map((message) => ({
+      id: message.id,
+      matchId: message.match_id,
+      from: message.sender_id === me ? 'me' : 'them',
+      text: message.body,
+      createdAt: message.created_at,
+    })),
+    blocks: blockRows.filter((row) => row.blocker_id === me).map((row) => row.blocked_id),
+    blockedBy: blockRows.filter((row) => row.blocked_id === me).map((row) => row.blocker_id),
+    hidden: hideRows.map((row) => row.hidden_id),
+    reports: reportRows
+      .filter((row) => isReason(row.reason))
+      .map((row) => ({
+        id: row.id,
+        studentId: row.target_id,
+        matchId: row.match_id ?? '',
+        messageId: row.message_id ?? '',
+        reason: row.reason as ReportReason,
+        createdAt: row.created_at,
+        resolved: row.resolved,
+      })),
+    people,
+    directory,
+  })
+}
+
+function scheduleReload() {
+  if (reloadTimer) clearTimeout(reloadTimer)
+  reloadTimer = setTimeout(() => {
+    void reloadSocial()
+  }, 250)
+}
+
+function listen() {
+  if (!supabase || listening) return
+  listening = true
+  void supabase
+    .channel('amora-social')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'likes' }, scheduleReload)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'matches' }, scheduleReload)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, scheduleReload)
+    .subscribe()
+}
+
+subscribeSession(() => {
+  const userId = getSession().userId
+  if (!getSession().ready) return
+  if (!userId) {
+    commit(emptyState(true))
+    return
+  }
+  listen()
+  void reloadSocial()
+})
+
+export async function passStudent(studentId: string) {
+  const me = getSession().userId
+  if (!supabase || !me || state.blocks.includes(studentId) || state.passed.includes(studentId) || isMatched(studentId)) return
+  commit({ ...state, passed: [...state.passed, studentId] })
+  const { error } = await supabase.from('passes').insert({ from_id: me, to_id: studentId })
+  if (error && error.code !== '23505') scheduleReload()
+}
+
+export async function likeStudent(studentId: string): Promise<LikeResult> {
+  if (!supabase || !getSession().userId || state.blocks.includes(studentId) || state.blockedBy.includes(studentId)) {
+    return { matched: false, matchId: null }
+  }
+  const existing = state.matches.find((match) => match.studentId === studentId)
+  if (existing) return { matched: true, matchId: existing.id }
+
+  const { data, error } = await supabase.rpc('like_student', { target: studentId })
+  await reloadSocial()
+  if (error) return { matched: false, matchId: null }
+  const matchId = typeof data === 'string' ? data : null
+  return { matched: Boolean(matchId), matchId }
+}
+
+export async function markMatchSeen(matchId: string) {
+  const match = state.matches.find((item) => item.id === matchId)
+  if (!supabase || !match || match.seen) return
+  commit({
+    ...state,
+    matches: state.matches.map((item) => (item.id === matchId ? { ...item, seen: true } : item)),
+  })
+  await supabase.from('matches').update(match.iAmUserA ? { seen_a: true } : { seen_b: true }).eq('id', matchId)
+}
+
+export async function sendMessage(matchId: string, text: string) {
+  const trimmed = text.trim()
+  const me = getSession().userId
+  const match = state.matches.find((item) => item.id === matchId)
+  if (!supabase || !me || !match || !trimmed || trimmed.length > 500 || state.blocks.includes(match.studentId)) return false
+  const { error } = await supabase.from('messages').insert({ match_id: matchId, sender_id: me, body: trimmed })
+  if (error) return false
+  await reloadSocial()
+  return true
+}
+
+export async function deleteConversation(matchId: string) {
+  if (!supabase) return
+  commit({ ...state, messages: state.messages.filter((message) => message.matchId !== matchId) })
+  await supabase.from('messages').delete().eq('match_id', matchId)
+}
+
+export async function unmatch(matchId: string) {
+  const me = getSession().userId
+  const match = state.matches.find((item) => item.id === matchId)
+  if (!supabase || !me || !match) return
+  commit({
+    ...state,
+    matches: state.matches.filter((item) => item.id !== matchId),
+    messages: state.messages.filter((message) => message.matchId !== matchId),
+    liked: state.liked.filter((id) => id !== match.studentId),
+  })
+  await supabase.from('matches').delete().eq('id', matchId)
+  await supabase.from('likes').delete().eq('from_id', me).eq('to_id', match.studentId)
+}
+
+export async function blockStudent(studentId: string) {
+  if (!supabase) return
+  const removed = new Set(state.matches.filter((match) => match.studentId === studentId).map((match) => match.id))
+  commit({
+    ...state,
+    blocks: state.blocks.includes(studentId) ? state.blocks : [...state.blocks, studentId],
+    hidden: state.hidden.filter((id) => id !== studentId),
+    matches: state.matches.filter((match) => match.studentId !== studentId),
+    messages: state.messages.filter((message) => !removed.has(message.matchId)),
+    liked: state.liked.filter((id) => id !== studentId),
+    incoming: state.incoming.filter((id) => id !== studentId),
+  })
+  await supabase.rpc('block_student', { target: studentId })
+}
+
+export async function unblockStudent(studentId: string) {
+  const me = getSession().userId
+  if (!supabase || !me) return
+  commit({ ...state, blocks: state.blocks.filter((id) => id !== studentId) })
+  await supabase.from('blocks').delete().eq('blocker_id', me).eq('blocked_id', studentId)
+}
+
+export async function hideStudent(studentId: string) {
+  const me = getSession().userId
+  if (!supabase || !me || state.blocks.includes(studentId) || state.hidden.includes(studentId)) return
+  commit({ ...state, hidden: [...state.hidden, studentId] })
+  await supabase.from('hides').insert({ user_id: me, hidden_id: studentId })
+}
+
+export async function unhideStudent(studentId: string) {
+  const me = getSession().userId
+  if (!supabase || !me) return
+  commit({ ...state, hidden: state.hidden.filter((id) => id !== studentId) })
+  await supabase.from('hides').delete().eq('user_id', me).eq('hidden_id', studentId)
+}
+
+export async function reportStudent(input: {
+  studentId: string
+  matchId: string
+  messageId?: string
+  reason: ReportReason
+}) {
+  const me = getSession().userId
+  if (!supabase || !me) return
+  const { error } = await supabase.from('reports').insert({
+    reporter_id: me,
+    target_id: input.studentId,
+    match_id: input.matchId || null,
+    message_id: input.messageId || null,
+    reason: input.reason,
+  })
+  if (!error) await reloadSocial()
 }

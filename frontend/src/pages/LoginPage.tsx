@@ -18,14 +18,15 @@ export function LoginPage() {
   if (choice !== 'yes') return <Navigate to="/" replace />
   if (hasSession()) return <Navigate to={pathAfterLogin()} replace />
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!email.trim() || password.length < 8) {
       setNotice('Enter your email and a password of at least 8 characters.')
       return
     }
-    if (!login(email, password)) {
-      setNotice('That email and password don’t match.')
+    const message = await login(email, password)
+    if (message) {
+      setNotice(message)
       return
     }
     navigate(pathAfterLogin(), { replace: true })

@@ -6,27 +6,30 @@ import { Card } from '@/components/Card.tsx'
 import { MatchOverlay } from '@/components/MatchOverlay.tsx'
 import { PageHeading } from '@/components/PageHeading.tsx'
 import { Pill } from '@/components/Pill.tsx'
-import { campusStudents, studentById } from '@/data/students.ts'
 import { usePageTitle } from '@/hooks/usePageTitle.ts'
-import { readProfile } from '@/lib/profile.ts'
+import { useSession } from '@/lib/account.ts'
+import { portraitStyle } from '@/lib/people.ts'
 import { fitsPreferences, isOpen, likeStudent, passStudent, useSocial } from '@/lib/social.ts'
 
 export function DiscoverPage() {
   usePageTitle('Discover')
   const navigate = useNavigate()
   const social = useSocial()
-  const profile = readProfile()
+  const profile = useSession().profile
   const [match, setMatch] = useState<{ name: string; matchId: string } | null>(null)
 
-  const open = campusStudents.filter((student) => isOpen(student, social))
+  const open = social.directory.filter((student) => isOpen(student, social))
   const deck = profile ? open.filter((student) => fitsPreferences(student, profile)) : []
   const student = deck[0] ?? null
 
-  function like(studentId: string) {
-    const result = likeStudent(studentId)
+  async function like(person: { id: string; name: string }) {
+    const result = await likeStudent(person.id)
     if (!result.matched || !result.matchId) return
-    const person = studentById(studentId)
-    if (person) setMatch({ name: person.name, matchId: result.matchId })
+    setMatch({ name: person.name, matchId: result.matchId })
+  }
+
+  if (!social.ready) {
+    return <p className="px-5 pt-6 text-sm text-mute">Loading students…</p>
   }
 
   return (
@@ -39,7 +42,7 @@ export function DiscoverPage() {
       {student ? (
         <article
           className="relative mt-4 min-h-[24rem] flex-1 overflow-hidden rounded-[1.75rem] shadow-card"
-          style={{ background: student.background }}
+          style={portraitStyle(student)}
         >
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_18%,rgba(255,255,255,0.5),transparent_42%)]" />
           <p className="absolute top-4 left-4 rounded-full bg-white/90 px-3 py-1 text-xs font-bold text-ink">
@@ -81,7 +84,7 @@ export function DiscoverPage() {
               type="button"
               aria-label={`Like ${student.name}`}
               className="grid size-16 place-items-center rounded-full bg-ink text-white shadow-soft"
-              onClick={() => like(student.id)}
+              onClick={() => like(student)}
             >
               <Heart className="size-7" fill="currentColor" />
             </button>

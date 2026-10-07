@@ -6,13 +6,14 @@ import { MatchOverlay } from '@/components/MatchOverlay.tsx'
 import { Pill } from '@/components/Pill.tsx'
 import { ReportReasonList } from '@/components/ReportReasonList.tsx'
 import { Sheet } from '@/components/Sheet.tsx'
-import { studentById } from '@/data/students.ts'
 import { usePageTitle } from '@/hooks/usePageTitle.ts'
+import { portraitStyle } from '@/lib/people.ts'
 import {
   hideStudent,
   isMatched,
   likeStudent,
   passStudent,
+  personById,
   reportStudent,
   unhideStudent,
   useSocial,
@@ -21,13 +22,15 @@ import {
 
 export function StudentPage() {
   const { studentId = '' } = useParams()
-  const student = studentById(studentId)
+  const student = personById(studentId)
   usePageTitle(student ? student.name : 'Profile')
   const navigate = useNavigate()
   const social = useSocial()
   const [match, setMatch] = useState<{ name: string; matchId: string } | null>(null)
   const [reporting, setReporting] = useState(false)
   const [reported, setReported] = useState(false)
+
+  if (!social.ready) return <p className="px-5 pt-8 text-sm text-mute">Loading…</p>
 
   if (!student || social.blocks.includes(student.id)) {
     return <Navigate to="/discover" replace />
@@ -40,8 +43,8 @@ export function StudentPage() {
 
   const hidden = social.hidden.includes(student.id)
 
-  function like() {
-    const result = likeStudent(student!.id)
+  async function like() {
+    const result = await likeStudent(student!.id)
     if (!result.matched || !result.matchId) return
     setMatch({ name: student!.name, matchId: result.matchId })
   }
@@ -58,7 +61,7 @@ export function StudentPage() {
 
   return (
     <div className="pb-8">
-      <div className="relative h-72 overflow-hidden" style={{ background: student.background }}>
+      <div className="relative h-72 overflow-hidden" style={portraitStyle(student)}>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.45),transparent_46%)]" />
         <button
           type="button"
@@ -152,7 +155,7 @@ export function StudentPage() {
 
       {reported ? (
         <Sheet title="Report saved" onClose={() => setReported(false)}>
-          <p className="text-sm leading-5 text-mute">It’s stored with your account on this browser.</p>
+          <p className="text-sm leading-5 text-mute">A reviewer can see this report.</p>
           <Button fullWidth className="mt-4" onClick={() => setReported(false)}>
             Done
           </Button>

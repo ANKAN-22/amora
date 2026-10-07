@@ -2,14 +2,14 @@ import { BadgeCheck, Settings, Shield, UserRound } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Card } from '@/components/Card.tsx'
 import { usePageTitle } from '@/hooks/usePageTitle.ts'
-import { readAccount, statusLabel } from '@/lib/account.ts'
-import { readProfile } from '@/lib/profile.ts'
+import { statusLabel, useSession } from '@/lib/account.ts'
 import { useSettings } from '@/lib/settings.ts'
 
 export function ProfilePage() {
   usePageTitle('Profile')
-  const account = readAccount()
-  const profile = readProfile()
+  const session = useSession()
+  const account = session.account
+  const profile = session.profile
   const settings = useSettings()
   const photo = profile?.photos[0]
   const campus = settings.showCampus

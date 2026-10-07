@@ -5,7 +5,7 @@ import { Button } from '@/components/Button.tsx'
 import { SelectField } from '@/components/SelectField.tsx'
 import { TextField } from '@/components/TextField.tsx'
 import { usePageTitle } from '@/hooks/usePageTitle.ts'
-import { hasSession, readAccount } from '@/lib/account.ts'
+import { addProfilePhoto, hasSession, removeProfilePhoto, saveProfile, useSession } from '@/lib/account.ts'
 import { compressImage } from '@/lib/image.ts'
 import {
   blankProfile,
@@ -13,8 +13,6 @@ import {
   interestOptions,
   lookingForOptions,
   profileProgress,
-  readProfile,
-  saveProfile,
   type StudentProfile,
 } from '@/lib/profile.ts'
 
@@ -25,14 +23,15 @@ const steps = ['Photos', 'About', 'Interests', 'Basics', 'Preferences']
 export function ProfileSetupPage() {
   usePageTitle('Create profile')
   const navigate = useNavigate()
-  const account = readAccount()
+  const session = useSession()
+  const account = session.account
   const [startedComplete] = useState(() => {
-    const saved = readProfile()
+    const saved = session.profile
     return saved ? profileProgress(saved).complete : false
   })
   const [step, setStep] = useState(0)
   const [profile, setProfile] = useState<StudentProfile>(() => {
-    return readProfile() ?? blankProfile({ department: account?.department ?? '', year: account?.year ?? '' })
+    return session.profile ?? blankProfile({ department: account?.department ?? '', year: account?.year ?? '' })
   })
   const [notice, setNotice] = useState('')
   const [reading, setReading] = useState(false)
@@ -44,19 +43,26 @@ export function ProfileSetupPage() {
 
   function update(next: StudentProfile) {
     setProfile(next)
-    saveProfile(next)
+    void saveProfile(next).then((message) => {
+      if (message) setNotice(message)
+    })
   }
 
   async function onPhoto(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     event.target.value = ''
-    if (!file || profile.photos.length >= 4) return
+    if (!file || profile.photoPaths.length >= 4) return
 
     setReading(true)
     setNotice('')
     try {
       const photo = await compressImage(file)
-      update({ ...profile, photos: [...profile.photos, photo] })
+      const saved = await addProfilePhoto(photo)
+      if ('error' in saved) {
+        setNotice(saved.error ?? 'Could not save that photo.')
+        return
+      }
+      setProfile(saved.profile)
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not read that image.')
     } finally {
@@ -64,17 +70,21 @@ export function ProfileSetupPage() {
     }
   }
 
-  function finish() {
+  async function finish() {
     if (!progress.complete) {
       const answered = profile.prompts.filter((prompt) => prompt.answer.trim().length >= 8).length
-      if (profile.photos.length < 2) setStep(0)
+      if (profile.photoPaths.length < 2) setStep(0)
       else if (profile.bio.trim().length < 40 || answered < 2) setStep(1)
       else if (profile.interests.length < 3) setStep(2)
       else setStep(3)
       setNotice(progress.missing[0] ?? 'Finish the missing parts of your profile.')
       return
     }
-    saveProfile(profile)
+    const message = await saveProfile(profile)
+    if (message) {
+      setNotice(message)
+      return
+    }
     navigate(startedComplete ? '/profile' : '/discover', { replace: true })
   }
 
@@ -107,7 +117,7 @@ export function ProfileSetupPage() {
       <p className="mt-4 text-xs font-semibold tracking-wide text-mute uppercase">{steps[step]}</p>
       <h1 className="mt-1 text-[1.85rem] font-extrabold tracking-tight">Create profile</h1>
 
-      {step === 0 ? <PhotoStep profile={profile} reading={reading} onPhoto={onPhoto} onRemove={(index) => update({ ...profile, photos: profile.photos.filter((_, photoIndex) => photoIndex !== index) })} /> : null}
+      {step === 0 ? <PhotoStep profile={profile} reading={reading} onPhoto={onPhoto} onRemove={(index) => void removeProfilePhoto(index).then((next) => { if (next) setProfile(next) })} /> : null}
       {step === 1 ? <AboutStep profile={profile} onChange={update} /> : null}
       {step === 2 ? <InterestStep profile={profile} onChange={update} /> : null}
       {step === 3 ? <BasicsStep profile={profile} onChange={update} /> : null}

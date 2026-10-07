@@ -1,5 +1,3 @@
-const profileKey = 'amora.profile'
-
 export const promptQuestions = [
   'A perfect evening on campus is',
   'I’m hoping to meet someone who',
@@ -26,6 +24,7 @@ export const lookingForOptions = ['Women', 'Men', 'Everyone']
 
 export type StudentProfile = {
   photos: string[]
+  photoPaths: string[]
   bio: string
   prompts: { question: string; answer: string }[]
   interests: string[]
@@ -37,9 +36,20 @@ export type StudentProfile = {
   lookingFor: string
 }
 
+export function promptsFrom(value: unknown) {
+  const saved = Array.isArray(value) ? value : []
+  return promptQuestions.map((question) => {
+    const match = saved.find((item) => {
+      return !!item && typeof item === 'object' && 'question' in item && item.question === question
+    }) as { answer?: unknown } | undefined
+    return { question, answer: typeof match?.answer === 'string' ? match.answer : '' }
+  })
+}
+
 export function blankProfile(seed: { department: string; year: string }): StudentProfile {
   return {
     photos: [],
+    photoPaths: [],
     bio: '',
     prompts: promptQuestions.map((question) => ({ question, answer: '' })),
     interests: [],
@@ -52,40 +62,34 @@ export function blankProfile(seed: { department: string; year: string }): Studen
   }
 }
 
-export function readProfile(): StudentProfile | null {
-  const raw = localStorage.getItem(profileKey)
-  if (!raw) return null
-
-  try {
-    const parsed = JSON.parse(raw) as Partial<StudentProfile>
-    if (!parsed || !Array.isArray(parsed.photos) || typeof parsed.bio !== 'string') return null
-    const prompts = promptQuestions.map((question) => {
-      const saved = Array.isArray(parsed.prompts)
-        ? parsed.prompts.find((item) => item.question === question)
-        : undefined
-      return { question, answer: typeof saved?.answer === 'string' ? saved.answer : '' }
-    })
-    return {
-      photos: parsed.photos.filter((photo) => typeof photo === 'string').slice(0, 4),
-      bio: parsed.bio,
-      prompts,
-      interests: Array.isArray(parsed.interests)
-        ? parsed.interests.filter((item) => typeof item === 'string')
-        : [],
-      department: typeof parsed.department === 'string' ? parsed.department : '',
-      year: typeof parsed.year === 'string' ? parsed.year : '',
-      gender: typeof parsed.gender === 'string' ? parsed.gender : '',
-      ageMin: typeof parsed.ageMin === 'number' ? parsed.ageMin : 18,
-      ageMax: typeof parsed.ageMax === 'number' ? parsed.ageMax : 26,
-      lookingFor: typeof parsed.lookingFor === 'string' ? parsed.lookingFor : '',
-    }
-  } catch {
-    return null
+export function profileFromParts(input: {
+  photos?: unknown
+  photoPaths?: unknown
+  bio?: unknown
+  prompts?: unknown
+  interests?: unknown
+  department?: unknown
+  year?: unknown
+  gender?: unknown
+  ageMin?: unknown
+  ageMax?: unknown
+  lookingFor?: unknown
+}): StudentProfile {
+  const paths = Array.isArray(input.photoPaths) ? input.photoPaths.filter((item) => typeof item === 'string') : []
+  const photos = Array.isArray(input.photos) ? input.photos.filter((item) => typeof item === 'string') : paths
+  return {
+    photos: photos.slice(0, 4),
+    photoPaths: paths.slice(0, 4),
+    bio: typeof input.bio === 'string' ? input.bio : '',
+    prompts: promptsFrom(input.prompts),
+    interests: Array.isArray(input.interests) ? input.interests.filter((item) => typeof item === 'string') : [],
+    department: typeof input.department === 'string' ? input.department : '',
+    year: typeof input.year === 'string' ? input.year : '',
+    gender: typeof input.gender === 'string' ? input.gender : '',
+    ageMin: typeof input.ageMin === 'number' ? input.ageMin : 18,
+    ageMax: typeof input.ageMax === 'number' ? input.ageMax : 26,
+    lookingFor: typeof input.lookingFor === 'string' ? input.lookingFor : '',
   }
-}
-
-export function saveProfile(profile: StudentProfile) {
-  localStorage.setItem(profileKey, JSON.stringify(profile))
 }
 
 function answeredPrompts(profile: StudentProfile) {
@@ -93,7 +97,8 @@ function answeredPrompts(profile: StudentProfile) {
 }
 
 export function profileProgress(profile: StudentProfile) {
-  const photoScore = (Math.min(profile.photos.length, 2) / 2) * 20
+  const photoCount = profile.photoPaths.length
+  const photoScore = (Math.min(photoCount, 2) / 2) * 20
   const bioLength = profile.bio.trim().length
   const bioScore = bioLength >= 40 ? 20 : bioLength >= 20 ? 10 : 0
   const promptScore = (Math.min(answeredPrompts(profile), 2) / 2) * 15
@@ -106,7 +111,7 @@ export function profileProgress(profile: StudentProfile) {
   const percent = Math.round(photoScore + bioScore + promptScore + interestScore + basicsScore + prefsScore)
 
   const missing: string[] = []
-  if (profile.photos.length < 2) missing.push('Add 2 photos')
+  if (photoCount < 2) missing.push('Add 2 photos')
   if (bioLength < 40) missing.push('Write a bio of at least 40 characters')
   const answered = answeredPrompts(profile)
   if (answered < 2) {

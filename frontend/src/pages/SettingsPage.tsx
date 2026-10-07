@@ -5,9 +5,7 @@ import { ScreenHeader } from '@/components/ScreenHeader.tsx'
 import { Sheet } from '@/components/Sheet.tsx'
 import { usePageTitle } from '@/hooks/usePageTitle.ts'
 import { clearAgeChoice } from '@/lib/ageGate.ts'
-import { clearSession, deleteAccountData, readAccount, statusLabel } from '@/lib/account.ts'
-import { clearSettings } from '@/lib/settings.ts'
-import { clearSocial } from '@/lib/social.ts'
+import { clearSession, deleteAccountData, statusLabel, useSession } from '@/lib/account.ts'
 
 const links = [
   { to: '/settings/privacy', label: 'Privacy', hint: 'What your profile shows' },
@@ -21,20 +19,18 @@ const links = [
 export function SettingsPage() {
   usePageTitle('Settings')
   const navigate = useNavigate()
-  const account = readAccount()
+  const account = useSession().account
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   function logOut() {
-    clearSession()
-    navigate('/login', { replace: true })
+    void clearSession().then(() => navigate('/login', { replace: true }))
   }
 
   function removeAccount() {
-    clearSocial()
-    clearSettings()
-    deleteAccountData()
-    clearAgeChoice()
-    navigate('/', { replace: true })
+    void deleteAccountData().then(() => {
+      clearAgeChoice()
+      navigate('/', { replace: true })
+    })
   }
 
   return (
@@ -68,7 +64,7 @@ export function SettingsPage() {
       {confirmDelete ? (
         <Sheet title="Delete your account?" onClose={() => setConfirmDelete(false)}>
           <p className="text-sm leading-5 text-mute">
-            Your profile, verification, likes, and chats on this browser are removed.
+            Your profile, verification, likes, and chats are removed.
           </p>
           <Button fullWidth className="mt-4" onClick={removeAccount}>
             Delete account

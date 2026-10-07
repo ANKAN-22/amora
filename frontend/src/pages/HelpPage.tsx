@@ -12,7 +12,7 @@ export function HelpPage() {
         <article className="rounded-[1.4rem] bg-blush px-4 py-3">
           <h2 className="font-bold">Report</h2>
           <p className="mt-1 text-mute">
-            Open a profile or a chat and choose a reason. Reports stay on this browser until a reviewer can see them.
+            Open a profile or a chat and choose a reason. A reviewer can see the report.
           </p>
         </article>
         <article className="rounded-[1.4rem] bg-blush px-4 py-3">

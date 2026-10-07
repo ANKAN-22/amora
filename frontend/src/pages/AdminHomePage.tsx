@@ -1,39 +1,41 @@
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Card } from '@/components/Card.tsx'
 import { usePageTitle } from '@/hooks/usePageTitle.ts'
 import { logoutAdmin } from '@/lib/admin.ts'
-import { readAccount, statusLabel } from '@/lib/account.ts'
-import { useSocial } from '@/lib/social.ts'
+import { reviewSummary } from '@/lib/review.ts'
 
 export function AdminHomePage() {
   usePageTitle('Review')
   const navigate = useNavigate()
-  const account = readAccount()
-  const social = useSocial()
-  const openReports = social.reports.filter((report) => !report.resolved).length
+  const [summary, setSummary] = useState({ pending: 0, students: 0, openReports: 0 })
+
+  useEffect(() => {
+    void reviewSummary().then(setSummary)
+  }, [])
 
   const cards = [
     {
       to: '/admin/verification',
       title: 'Verification',
-      detail: account ? statusLabel(account.verificationStatus) : 'No student account yet',
+      detail: summary.pending === 1 ? '1 waiting' : `${summary.pending} waiting`,
     },
     {
       to: '/admin/users',
       title: 'Users',
-      detail: account ? account.name : 'No student account yet',
+      detail: summary.students === 1 ? '1 student' : `${summary.students} students`,
     },
     {
       to: '/admin/reports',
       title: 'Reports',
-      detail: openReports === 1 ? '1 open' : `${openReports} open`,
+      detail: summary.openReports === 1 ? '1 open' : `${summary.openReports} open`,
     },
   ]
 
   return (
     <div className="px-5 pt-2 pb-8">
       <h1 className="text-[1.65rem] font-extrabold tracking-tight">Dashboard</h1>
-      <p className="mt-1 text-sm leading-5 text-mute">The student account and reports stored on this browser.</p>
+      <p className="mt-1 text-sm leading-5 text-mute">Students, screenshots, and reports from every phone.</p>
       <div className="mt-5 grid gap-3">
         {cards.map((card) => (
           <Link key={card.to} to={card.to}>
@@ -48,8 +50,7 @@ export function AdminHomePage() {
         type="button"
         className="mt-6 text-sm font-semibold text-mute"
         onClick={() => {
-          logoutAdmin()
-          navigate('/admin/login', { replace: true })
+          void logoutAdmin().then(() => navigate('/admin/login', { replace: true }))
         }}
       >
         Log out

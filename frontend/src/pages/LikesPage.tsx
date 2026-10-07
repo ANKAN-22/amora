@@ -3,9 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { MatchOverlay } from '@/components/MatchOverlay.tsx'
 import { PageHeading } from '@/components/PageHeading.tsx'
 import { StudentAvatar } from '@/components/StudentAvatar.tsx'
-import { studentById } from '@/data/students.ts'
 import { usePageTitle } from '@/hooks/usePageTitle.ts'
-import { incomingLikes, likeStudent, outgoingLikes, useSocial } from '@/lib/social.ts'
+import { incomingLikes, likeStudent, outgoingLikes, personById, useSocial } from '@/lib/social.ts'
 
 export function LikesPage() {
   usePageTitle('Likes')
@@ -15,10 +14,10 @@ export function LikesPage() {
   const outgoing = outgoingLikes(social)
   const [match, setMatch] = useState<{ name: string; matchId: string } | null>(null)
 
-  function like(studentId: string) {
-    const result = likeStudent(studentId)
+  async function like(studentId: string) {
+    const result = await likeStudent(studentId)
     if (!result.matched || !result.matchId) return
-    const person = studentById(studentId)
+    const person = personById(studentId)
     if (person) setMatch({ name: person.name, matchId: result.matchId })
   }
 

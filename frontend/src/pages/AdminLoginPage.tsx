@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/Button.tsx'
 import { TextField } from '@/components/TextField.tsx'
 import { usePageTitle } from '@/hooks/usePageTitle.ts'
-import { localAdmin, loginAdmin } from '@/lib/admin.ts'
+import { loginAdmin } from '@/lib/admin.ts'
 
 export function AdminLoginPage() {
   usePageTitle('Review login')
@@ -12,10 +12,11 @@ export function AdminLoginPage() {
   const [password, setPassword] = useState('')
   const [notice, setNotice] = useState('')
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!loginAdmin(email, password)) {
-      setNotice('That reviewer login doesn’t match.')
+    const message = await loginAdmin(email, password)
+    if (message) {
+      setNotice(message)
       return
     }
     navigate('/admin', { replace: true })
@@ -29,7 +30,7 @@ export function AdminLoginPage() {
       <p className="mt-6 text-xs font-semibold tracking-wide text-mute uppercase">Admin</p>
       <h1 className="mt-1 text-[1.85rem] font-extrabold tracking-tight">Review login</h1>
       <p className="mt-2 text-sm leading-6 text-mute">
-        This is separate from a student account. On this browser, sign in with {localAdmin.email} and {localAdmin.password}.
+        Sign in with the reviewer account. In Supabase, that profile has to be marked as admin.
       </p>
       <form className="mt-6 grid gap-4" onSubmit={onSubmit}>
         <TextField
