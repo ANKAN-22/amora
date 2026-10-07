@@ -1,6 +1,16 @@
 import { useSyncExternalStore } from 'react'
 import { adminSupabase } from '@/lib/supabase.ts'
 
+function envValue(name: 'VITE_ADMIN_EMAIL' | 'VITE_ADMIN_PASSWORD') {
+  const value = import.meta.env[name]
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+export const localAdmin = {
+  email: envValue('VITE_ADMIN_EMAIL'),
+  password: envValue('VITE_ADMIN_PASSWORD'),
+}
+
 type AdminState = {
   ready: boolean
   authed: boolean

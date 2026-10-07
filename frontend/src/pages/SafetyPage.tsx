@@ -24,7 +24,7 @@ function PersonRow({
         <span className="block truncate font-bold">{name}</span>
         <span className="mt-0.5 block truncate text-sm text-mute">{detail}</span>
       </span>
-      <button type="button" className="h-9 shrink-0 rounded-full bg-blush px-4 text-sm font-semibold" onClick={onAction}>
+      <button type="button" className="h-11 shrink-0 rounded-full bg-blush px-4 text-sm font-semibold" onClick={onAction}>
         {action}
       </button>
     </li>

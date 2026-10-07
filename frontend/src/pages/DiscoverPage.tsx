@@ -41,7 +41,7 @@ export function DiscoverPage() {
 
       {student ? (
         <article
-          className="relative mt-4 min-h-[24rem] flex-1 overflow-hidden rounded-[1.75rem] shadow-card"
+          className="relative mt-4 min-h-0 flex-1 overflow-hidden rounded-[1.75rem] shadow-card"
           style={portraitStyle(student)}
         >
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_18%,rgba(255,255,255,0.5),transparent_42%)]" />

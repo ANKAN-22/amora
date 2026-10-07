@@ -45,7 +45,7 @@ export function LikesPage() {
                   </Link>
                   <button
                     type="button"
-                    className="h-9 shrink-0 rounded-full bg-coral px-4 text-sm font-semibold text-white"
+                    className="h-11 shrink-0 rounded-full bg-coral px-4 text-sm font-semibold text-white"
                     onClick={() => like(student.id)}
                   >
                     Like
