@@ -30,8 +30,9 @@ export function AdminLoginPage() {
       <p className="mt-6 text-xs font-semibold tracking-wide text-mute uppercase">Admin</p>
       <h1 className="mt-1 text-[1.85rem] font-extrabold tracking-tight">Review login</h1>
       <p className="mt-2 text-sm leading-6 break-words text-mute">
-        Reviewer email {localAdmin.email || 'admin@amora.local'} and password {localAdmin.password || 'amora-admin'}. This
-        login is separate from a student account.
+        {localAdmin.email && localAdmin.password
+          ? `Reviewer email ${localAdmin.email} and password ${localAdmin.password}. This login is separate from a student account.`
+          : 'This login is separate from a student account.'}
       </p>
       <form className="mt-6 grid gap-4" onSubmit={onSubmit}>
         <TextField

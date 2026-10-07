@@ -12,8 +12,8 @@ export function ConfigGate({ children }: { children: ReactNode }) {
           <p className="text-xs font-semibold tracking-wide text-mute uppercase">Supabase</p>
           <h1 className="mt-2 text-[1.7rem] font-extrabold tracking-tight">Connect the database</h1>
           <p className="mt-3 text-sm leading-6 text-mute">
-            Create a free Supabase project, run frontend/supabase/schema.sql in the SQL editor, then put the project URL
-            and anon key in frontend/.env. Restart npm run dev after saving the file.
+            Create a free Supabase project, run supabase/schema.sql in the SQL editor, then put the project URL and
+            anon key in frontend/.env. Restart npm run dev after saving the file.
           </p>
         </div>
       </PhoneFrame>

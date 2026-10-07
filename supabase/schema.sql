@@ -1,4 +1,5 @@
--- Amora on Supabase. Run this once in the SQL editor.
+-- Amora database. Run this in the Supabase SQL editor.
+-- Safe to run again. It updates the rules without deleting student accounts.
 --
 -- Before sign-up works on localhost:
 -- Authentication → Providers → Email → turn off "Confirm email".
@@ -178,6 +179,13 @@ declare
   match_id uuid;
 begin
   if me is null or target is null or target = me then
+    return null;
+  end if;
+
+  if not exists (
+    select 1 from public.profiles
+    where id = target and verification_status = 'APPROVED' and is_admin = false
+  ) then
     return null;
   end if;
 
@@ -372,6 +380,37 @@ create policy "matches delete" on public.matches
   for delete to authenticated
   using (auth.uid() in (user_a, user_b));
 
+create or replace function public.protect_match()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null or public.is_admin() then
+    return new;
+  end if;
+
+  new.id := old.id;
+  new.user_a := old.user_a;
+  new.user_b := old.user_b;
+  new.created_at := old.created_at;
+
+  if auth.uid() = old.user_a then
+    new.seen_b := old.seen_b;
+  elsif auth.uid() = old.user_b then
+    new.seen_a := old.seen_a;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists protect_match on public.matches;
+create trigger protect_match
+  before update on public.matches
+  for each row execute function public.protect_match();
+
 drop policy if exists "messages read" on public.messages;
 create policy "messages read" on public.messages
   for select to authenticated
@@ -441,7 +480,8 @@ select
   photo_paths,
   verification_status
 from public.profiles
-where is_admin = false;
+where is_admin = false
+  and verification_status = 'APPROVED';
 
 grant select on public.directory to authenticated;
 
@@ -508,10 +548,33 @@ create policy "photos delete own" on storage.objects
     and (storage.foldername(name))[1] = auth.uid()::text
   );
 
+create or replace function public.can_read_photo(owner_id text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select public.is_admin()
+    or owner_id = auth.uid()::text
+    or exists (
+      select 1 from public.profiles
+      where id::text = owner_id
+        and is_admin = false
+        and verification_status = 'APPROVED'
+    );
+$$;
+
+revoke all on function public.can_read_photo(text) from public;
+grant execute on function public.can_read_photo(text) to authenticated;
+
 drop policy if exists "photos read signed in" on storage.objects;
 create policy "photos read signed in" on storage.objects
   for select to authenticated
-  using (bucket_id = 'photos');
+  using (
+    bucket_id = 'photos'
+    and public.can_read_photo((storage.foldername(name))[1])
+  );
 
 do $$
 begin
