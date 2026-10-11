@@ -4,7 +4,9 @@ import { AppShell } from '@/user/AppShell.tsx'
 import { PublicShell } from '@/start/PublicShell.tsx'
 import { AdminHomePage } from '@/admin/AdminHomePage.tsx'
 import { AdminLoginPage } from '@/admin/AdminLoginPage.tsx'
+import { AdminPaymentsPage } from '@/admin/AdminPaymentsPage.tsx'
 import { AdminReportsPage } from '@/admin/AdminReportsPage.tsx'
+import { AdminSubscriptionsPage } from '@/admin/AdminSubscriptionsPage.tsx'
 import { AdminUsersPage } from '@/admin/AdminUsersPage.tsx'
 import { AdminVerificationPage } from '@/admin/AdminVerificationPage.tsx'
 import { AgePage } from '@/start/AgePage.tsx'
@@ -59,6 +61,8 @@ export function AppRoutes() {
         <Route path="admin/verification" element={<AdminVerificationPage />} />
         <Route path="admin/users" element={<AdminUsersPage />} />
         <Route path="admin/reports" element={<AdminReportsPage />} />
+        <Route path="admin/subscriptions" element={<AdminSubscriptionsPage />} />
+        <Route path="admin/payments" element={<AdminPaymentsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -14,9 +14,10 @@ export const localAdmin = {
 type AdminState = {
   ready: boolean
   authed: boolean
+  userId: string | null
 }
 
-let state: AdminState = { ready: false, authed: false }
+let state: AdminState = { ready: false, authed: false, userId: null }
 const listeners = new Set<() => void>()
 
 function emit() {
@@ -39,19 +40,19 @@ export function useAdmin() {
 
 async function loadAdmin() {
   if (!adminSupabase) {
-    commit({ ready: true, authed: false })
+    commit({ ready: true, authed: false, userId: null })
     return
   }
   const { data } = await adminSupabase.auth.getSession()
   const userId = data.session?.user.id
   if (!userId) {
-    commit({ ready: true, authed: false })
+    commit({ ready: true, authed: false, userId: null })
     return
   }
   const { data: profile } = await adminSupabase.from('profiles').select('is_admin').eq('id', userId).maybeSingle()
   const authed = profile?.is_admin === true
   if (!authed) await adminSupabase.auth.signOut()
-  commit({ ready: true, authed })
+  commit({ ready: true, authed, userId: authed ? userId : null })
 }
 
 void loadAdmin()
@@ -66,14 +67,14 @@ export async function loginAdmin(email: string, password: string) {
   const { data: profile } = await adminSupabase.from('profiles').select('is_admin').eq('id', data.user.id).maybeSingle()
   if (profile?.is_admin !== true) {
     await adminSupabase.auth.signOut()
-    commit({ ready: true, authed: false })
+    commit({ ready: true, authed: false, userId: null })
     return 'That account is not a reviewer. Mark it as admin in Supabase first.'
   }
-  commit({ ready: true, authed: true })
+  commit({ ready: true, authed: true, userId: data.user.id })
   return null
 }
 
 export async function logoutAdmin() {
   await adminSupabase?.auth.signOut()
-  commit({ ready: true, authed: false })
+  commit({ ready: true, authed: false, userId: null })
 }

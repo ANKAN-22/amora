@@ -1,60 +1,57 @@
-import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { Card } from '@/shared/Card.tsx'
+import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { usePageTitle } from '@/shared/usePageTitle.ts'
-import { logoutAdmin } from '@/admin/admin.ts'
-import { reviewSummary } from '@/admin/review.ts'
+import { loadDashboardStats, type DashboardStats } from '@/admin/review.ts'
+import { useAdminDataVersion } from '@/admin/refresh.ts'
+import { errorMessage, formatMoney } from '@/admin/format.ts'
+import { Loading, Notice, PageTitle, StatCard } from '@/admin/ui.tsx'
 
 export function AdminHomePage() {
-  usePageTitle('Review')
-  const navigate = useNavigate()
-  const [summary, setSummary] = useState({ pending: 0, students: 0, openReports: 0 })
+  usePageTitle('Dashboard')
+  const version = useAdminDataVersion()
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [error, setError] = useState('')
 
-  useEffect(() => {
-    void reviewSummary().then(setSummary)
+  const load = useCallback(async () => {
+    try {
+      setStats(await loadDashboardStats())
+      setError('')
+    } catch (err) {
+      setError(errorMessage(err))
+    }
   }, [])
 
-  const cards = [
-    {
-      to: '/admin/verification',
-      title: 'Verification',
-      detail: summary.pending === 1 ? '1 waiting' : `${summary.pending} waiting`,
-    },
-    {
-      to: '/admin/users',
-      title: 'Users',
-      detail: summary.students === 1 ? '1 student' : `${summary.students} students`,
-    },
-    {
-      to: '/admin/reports',
-      title: 'Reports',
-      detail: summary.openReports === 1 ? '1 open' : `${summary.openReports} open`,
-    },
-  ]
+  useEffect(() => {
+    void load()
+  }, [load, version])
+
+  const revenue =
+    stats && stats.revenue.length > 0 ? stats.revenue.map((item) => formatMoney(item.minor, item.currency)).join(' + ') : '0'
 
   return (
-    <div className="px-5 pt-2 pb-8">
-      <h1 className="text-[1.65rem] font-extrabold tracking-tight">Dashboard</h1>
-      <p className="mt-1 text-sm leading-5 text-mute">Students, screenshots, and reports from every phone.</p>
-      <div className="mt-5 grid gap-3">
-        {cards.map((card) => (
-          <Link key={card.to} to={card.to}>
-            <Card className="px-4 py-4">
-              <p className="font-bold">{card.title}</p>
-              <p className="mt-0.5 text-sm text-mute">{card.detail}</p>
-            </Card>
-          </Link>
-        ))}
-      </div>
-      <button
-        type="button"
-        className="mt-6 text-sm font-semibold text-mute"
-        onClick={() => {
-          void logoutAdmin().then(() => navigate('/admin/login', { replace: true }))
-        }}
-      >
-        Log out
-      </button>
+    <div>
+      <PageTitle title="Dashboard" subtitle="Live counts from your Supabase database." />
+      <Notice notice={error ? { kind: 'error', text: `${error} If this mentions a missing table or column, run the admin migration SQL first.` } : null} />
+      {!stats && !error ? <Loading /> : null}
+      {stats ? (
+        <>
+          <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatCard label="Total users" value={stats.totalUsers} hint="Student accounts (admins excluded)" />
+            <StatCard label="Verified students" value={stats.verified} />
+            <StatCard label="Pending verifications" value={stats.pending} />
+            <StatCard label="Banned users" value={stats.banned} tone={stats.banned > 0 ? 'bad' : 'neutral'} />
+            <StatCard label="Active premium" value={stats.activePremium} hint="Active and not past expiry" />
+            <StatCard label="Open reports" value={stats.openReports} />
+            <StatCard label="Successful payments" value={stats.successfulPayments} />
+            <StatCard label="Revenue" value={revenue} hint="Sum of successful payment records" />
+          </div>
+          <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-coral-deep">
+            <Link to="/admin/verification">Review verifications →</Link>
+            <Link to="/admin/reports">Open reports →</Link>
+            <Link to="/admin/users">Manage users →</Link>
+          </div>
+        </>
+      ) : null}
     </div>
   )
 }
