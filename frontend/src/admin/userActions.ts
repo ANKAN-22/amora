@@ -21,13 +21,26 @@ async function readError(error: unknown) {
   return error instanceof Error ? error.message : 'Something went wrong.'
 }
 
-// Every call goes to the "admin-users" Edge Function, which re-checks admin permission on the server.
-// This only resolves when the server reports { ok: true }; anything else throws.
+// Delete runs in the database as admin_delete_account. Ban and unban still go to the
+// "admin-users" Edge Function. This only resolves when the server confirms the change.
+async function deleteAccount(userId: string, confirmEmail: string): Promise<ActionResult> {
+  const { data, error } = await db().rpc('admin_delete_account', {
+    target: userId,
+    confirm_email: confirmEmail,
+  })
+  if (error) throw new Error(error.message)
+  bumpAdminData()
+  const warnings = Array.isArray(data) ? data.filter((item): item is string => typeof item === 'string' && item.length > 0) : []
+  return { warnings }
+}
+
 export async function runAccountAction(
   action: AccountAction,
   userId: string,
   extra: { reason?: string; confirmEmail?: string } = {},
 ): Promise<ActionResult> {
+  if (action === 'delete') return deleteAccount(userId, extra.confirmEmail ?? '')
+
   const { data, error } = await db().functions.invoke('admin-users', { body: { action, userId, ...extra } })
   if (error) throw new Error(await readError(error))
   if (!data || typeof data !== 'object' || (data as { ok?: unknown }).ok !== true) {
