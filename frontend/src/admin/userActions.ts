@@ -1,4 +1,3 @@
-import { FunctionsFetchError, FunctionsHttpError, FunctionsRelayError } from '@supabase/supabase-js'
 import { db } from '@/admin/review.ts'
 import { bumpAdminData } from '@/admin/refresh.ts'
 
@@ -6,52 +5,55 @@ export type AccountAction = 'delete' | 'ban' | 'unban'
 
 type ActionResult = { warnings: string[] }
 
-async function readError(error: unknown) {
-  if (error instanceof FunctionsHttpError) {
-    try {
-      const body: unknown = await error.context.json()
-      if (body && typeof body === 'object' && 'error' in body && typeof body.error === 'string') return body.error
-    } catch {
-      // fall through to the generic message
+const FILE_BUCKETS = ['enrollment', 'photos'] as const
+
+async function removeStoredFiles(userId: string) {
+  const warnings: string[] = []
+  for (const bucket of FILE_BUCKETS) {
+    const paths: string[] = []
+    for (let offset = 0; ; offset += 100) {
+      const listed = await db().storage.from(bucket).list(userId, { limit: 100, offset })
+      if (listed.error) {
+        warnings.push(`Could not list ${bucket} files: ${listed.error.message}`)
+        break
+      }
+      const files = listed.data ?? []
+      for (const file of files) {
+        if (file.id) paths.push(`${userId}/${file.name}`)
+      }
+      if (files.length < 100) break
     }
-    return 'The server rejected the request.'
+    if (paths.length === 0) continue
+    const removed = await db().storage.from(bucket).remove(paths)
+    if (removed.error) warnings.push(`Could not remove ${bucket} files: ${removed.error.message}`)
   }
-  if (error instanceof FunctionsRelayError) return 'The admin function could not be reached. Check that it is deployed.'
-  if (error instanceof FunctionsFetchError) return 'Network error while contacting the admin function.'
-  return error instanceof Error ? error.message : 'Something went wrong.'
+  return warnings
 }
 
-// Delete runs in the database as admin_delete_account. Ban and unban still go to the
-// "admin-users" Edge Function. This only resolves when the server confirms the change.
-async function deleteAccount(userId: string, confirmEmail: string): Promise<ActionResult> {
-  const { data, error } = await db().rpc('admin_delete_account', {
-    target: userId,
-    confirm_email: confirmEmail,
-  })
+async function callAccountFunction(name: 'admin_ban_account' | 'admin_unban_account', args: Record<string, unknown>) {
+  const { error } = await db().rpc(name, args)
   if (error) throw new Error(error.message)
   bumpAdminData()
-  const warnings = Array.isArray(data) ? data.filter((item): item is string => typeof item === 'string' && item.length > 0) : []
-  return { warnings }
+  return { warnings: [] }
 }
 
+// Delete removes photos and the enrollment screenshot, then the login.
+// Deleting the login cascades the profile, likes, matches, messages and reports.
 export async function runAccountAction(
   action: AccountAction,
   userId: string,
   extra: { reason?: string; confirmEmail?: string } = {},
 ): Promise<ActionResult> {
-  if (action === 'delete') return deleteAccount(userId, extra.confirmEmail ?? '')
+  if (action === 'ban') return callAccountFunction('admin_ban_account', { target: userId, reason: extra.reason ?? '' })
+  if (action === 'unban') return callAccountFunction('admin_unban_account', { target: userId })
 
-  const { data, error } = await db().functions.invoke('admin-users', { body: { action, userId, ...extra } })
-  if (error) throw new Error(await readError(error))
-  if (!data || typeof data !== 'object' || (data as { ok?: unknown }).ok !== true) {
-    const message = data && typeof data === 'object' && typeof (data as { error?: unknown }).error === 'string'
-      ? (data as { error: string }).error
-      : 'The server did not confirm the change.'
-    throw new Error(message)
-  }
-  const warnings = Array.isArray((data as { warnings?: unknown }).warnings)
-    ? ((data as { warnings: unknown[] }).warnings.filter((item) => typeof item === 'string') as string[])
-    : []
+  const warnings = await removeStoredFiles(userId)
+  const { data, error } = await db().rpc('admin_delete_account', {
+    target: userId,
+    confirm_email: extra.confirmEmail ?? '',
+  })
+  if (error) throw new Error(error.message)
   bumpAdminData()
-  return { warnings }
+  const serverWarnings = Array.isArray(data) ? data.filter((item): item is string => typeof item === 'string' && item.length > 0) : []
+  return { warnings: [...warnings, ...serverWarnings] }
 }
