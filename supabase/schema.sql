@@ -274,7 +274,6 @@ declare
   target_email text;
   target_admin boolean;
   admin_count integer;
-  owner_role text := current_user;
 begin
   if auth.uid() is null or not public.is_admin() then
     raise exception 'Admin permission required.';
@@ -301,16 +300,14 @@ begin
   end if;
 
   begin
-    perform set_config('role', 'authenticated', true);
     delete from storage.objects
     where bucket_id in ('enrollment', 'photos')
       and split_part(name, '/', 1) = target::text;
   exception
     when others then
-      warnings := array_append(warnings, sqlerrm);
+      warnings := array_append(warnings, 'Photos or the enrollment screenshot could not be removed.');
   end;
 
-  perform set_config('role', owner_role, true);
   delete from auth.users where id = target;
   delete from public.profiles where id = target;
 
