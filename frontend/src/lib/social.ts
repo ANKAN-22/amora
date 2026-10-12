@@ -44,6 +44,7 @@ export type Report = {
 
 export type SocialState = {
   ready: boolean
+  loadError: string
   passed: string[]
   liked: string[]
   incoming: string[]
@@ -60,6 +61,7 @@ export type SocialState = {
 export type LikeResult = {
   matched: boolean
   matchId: string | null
+  failed: boolean
 }
 
 type DirectoryRow = {
@@ -81,6 +83,7 @@ type DirectoryRow = {
 
 const emptyState = (ready: boolean): SocialState => ({
   ready,
+  loadError: '',
   passed: [],
   liked: [],
   incoming: [],
@@ -227,6 +230,19 @@ export async function reloadSocial() {
     supabase.from('reports').select('*').eq('reporter_id', me),
   ])
 
+  const queryError =
+    directoryResult.error ||
+    likesResult.error ||
+    passesResult.error ||
+    hidesResult.error ||
+    blocksResult.error ||
+    matchesResult.error ||
+    reportsResult.error
+  if (queryError) {
+    commit({ ...state, ready: true, loadError: 'Couldn’t load students. Check your connection and try again.' })
+    return
+  }
+
   const directoryRows = (directoryResult.data ?? []) as DirectoryRow[]
   const likeRows = (likesResult.data ?? []) as { from_id: string; to_id: string }[]
   const passRows = (passesResult.data ?? []) as { to_id: string }[]
@@ -254,6 +270,11 @@ export async function reloadSocial() {
   const messageResult = matchIds.length
     ? await supabase.from('messages').select('*').in('match_id', matchIds).order('created_at', { ascending: true })
     : { data: [] }
+  if ('error' in messageResult && messageResult.error) {
+    commit({ ...state, ready: true, loadError: 'Couldn’t load students. Check your connection and try again.' })
+    return
+  }
+
   const messageRows = (messageResult.data ?? []) as {
     id: string
     match_id: string
@@ -290,6 +311,7 @@ export async function reloadSocial() {
 
   commit({
     ready: true,
+    loadError: '',
     passed: passRows.map((row) => row.to_id),
     liked: likeRows.filter((row) => row.from_id === me).map((row) => row.to_id),
     incoming: likeRows.filter((row) => row.to_id === me).map((row) => row.from_id),
@@ -357,24 +379,29 @@ subscribeSession(() => {
 
 export async function passStudent(studentId: string) {
   const me = getSession().userId
-  if (!supabase || !me || state.blocks.includes(studentId) || state.passed.includes(studentId) || isMatched(studentId)) return
+  if (!supabase || !me || state.blocks.includes(studentId) || state.passed.includes(studentId) || isMatched(studentId)) {
+    return false
+  }
+  const previous = state
   commit({ ...state, passed: [...state.passed, studentId] })
   const { error } = await supabase.from('passes').insert({ from_id: me, to_id: studentId })
-  if (error && error.code !== '23505') scheduleReload()
+  if (!error || error.code === '23505') return true
+  commit(previous)
+  return false
 }
 
 export async function likeStudent(studentId: string): Promise<LikeResult> {
   if (!supabase || !getSession().userId || state.blocks.includes(studentId) || state.blockedBy.includes(studentId)) {
-    return { matched: false, matchId: null }
+    return { matched: false, matchId: null, failed: true }
   }
   const existing = state.matches.find((match) => match.studentId === studentId)
-  if (existing) return { matched: true, matchId: existing.id }
+  if (existing) return { matched: true, matchId: existing.id, failed: false }
 
   const { data, error } = await supabase.rpc('like_student', { target: studentId })
   await reloadSocial()
-  if (error) return { matched: false, matchId: null }
+  if (error) return { matched: false, matchId: null, failed: true }
   const matchId = typeof data === 'string' ? data : null
-  return { matched: Boolean(matchId), matchId }
+  return { matched: Boolean(matchId), matchId, failed: false }
 }
 
 export async function markMatchSeen(matchId: string) {
