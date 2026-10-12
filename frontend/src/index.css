@@ -9,6 +9,12 @@
   --color-ink: #1a1a1a;
   --color-mute: #8e8796;
   --color-line: #f3e3e8;
+  --color-ivory: #f4efe8;
+  --color-cream: #fbf7f2;
+  --color-wine: #6e2436;
+  --color-wine-deep: #541c2b;
+  --color-rose: #9a6a72;
+  --font-serif: Georgia, 'Palatino Linotype', Palatino, serif;
   --shadow-card: 0 16px 40px rgb(80 20 40 / 0.08);
   --shadow-soft: 0 10px 24px rgb(255 107 129 / 0.28);
 }

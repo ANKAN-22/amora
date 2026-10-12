@@ -1,7 +1,7 @@
 import type { ButtonHTMLAttributes } from 'react'
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'primary' | 'secondary' | 'ghost'
+  variant?: 'primary' | 'secondary' | 'ghost' | 'editorial'
   fullWidth?: boolean
 }
 
@@ -9,6 +9,7 @@ const variantClass = {
   primary: 'bg-coral text-white shadow-soft hover:bg-coral-deep',
   secondary: 'bg-white text-ink ring-1 ring-black/5 hover:bg-blush',
   ghost: 'bg-transparent text-ink hover:bg-blush',
+  editorial: 'bg-wine text-cream hover:bg-wine-deep',
 } as const
 
 export function Button({
