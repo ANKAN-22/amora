@@ -173,6 +173,11 @@ export function messagesFor(matchId: string, social: SocialState = state) {
   return social.messages.filter((message) => message.matchId === matchId)
 }
 
+export function isUnread(match: Match, social: SocialState = state) {
+  if (match.seen) return false
+  return social.messages.some((message) => message.matchId === match.id && message.from === 'them')
+}
+
 export function lastMessage(matchId: string, social: SocialState = state) {
   const thread = messagesFor(matchId, social)
   return thread.length > 0 ? thread[thread.length - 1] : null
@@ -384,7 +389,8 @@ export async function markMatchSeen(matchId: string) {
     ...state,
     matches: state.matches.map((item) => (item.id === matchId ? { ...item, seen: true } : item)),
   })
-  await supabase.from('matches').update(match.iAmUserA ? { seen_a: true } : { seen_b: true }).eq('id', matchId)
+  const { error } = await supabase.from('matches').update(match.iAmUserA ? { seen_a: true } : { seen_b: true }).eq('id', matchId)
+  if (error) scheduleReload()
 }
 
 export async function sendMessage(matchId: string, text: string) {

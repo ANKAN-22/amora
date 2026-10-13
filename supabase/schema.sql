@@ -461,6 +461,44 @@ revoke all on function public.guard_message_insert() from public;
 grant execute on function public.clear_conversation(uuid) to authenticated;
 grant execute on function public.guard_message_insert() to authenticated;
 
+-- A new message marks the match unread for the recipient only.
+create or replace function public.unread_recipient()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  pair_a uuid;
+  pair_b uuid;
+begin
+  select user_a, user_b into pair_a, pair_b
+  from public.matches
+  where id = new.match_id;
+
+  if pair_a is null then
+    return new;
+  end if;
+
+  perform set_config('amora.match_write', 'on', true);
+  if new.sender_id = pair_a then
+    update public.matches set seen_b = false where id = new.match_id and seen_b;
+  elsif new.sender_id = pair_b then
+    update public.matches set seen_a = false where id = new.match_id and seen_a;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists unread_recipient on public.messages;
+create trigger unread_recipient
+  after insert on public.messages
+  for each row execute function public.unread_recipient();
+
+revoke all on function public.unread_recipient() from public;
+grant execute on function public.unread_recipient() to authenticated;
+
 create or replace function public.delete_own_account()
 returns void
 language plpgsql

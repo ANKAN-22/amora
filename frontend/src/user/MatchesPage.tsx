@@ -5,7 +5,7 @@ import { Card } from '@/shared/Card.tsx'
 import { PageHeading } from '@/shared/PageHeading.tsx'
 import { StudentAvatar } from '@/shared/StudentAvatar.tsx'
 import { usePageTitle } from '@/shared/usePageTitle.ts'
-import { lastMessage, personById, useSocial, visibleMatches } from '@/lib/social.ts'
+import { isUnread, lastMessage, personById, useSocial, visibleMatches } from '@/lib/social.ts'
 
 function shortTime(iso: string) {
   const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60000)
@@ -55,7 +55,7 @@ export function MatchesPage() {
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
                       <span className="truncate font-bold">{student.name}</span>
-                      {!match.seen ? (
+                      {isUnread(match, social) ? (
                         <span className="rounded-full bg-blush px-2 py-0.5 text-[10px] font-bold tracking-wide text-coral uppercase">
                           New
                         </span>

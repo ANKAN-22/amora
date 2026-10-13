@@ -33,10 +33,12 @@ export function ChatPage() {
   const [reportMessageId, setReportMessageId] = useState('')
   const endRef = useRef<HTMLDivElement>(null)
   const messages = messagesFor(matchId, social)
+  const latestIncomingId = messages.reduce((id, message) => (message.from === 'them' ? message.id : id), '')
 
   useEffect(() => {
+    if (!match || match.seen) return
     markMatchSeen(matchId)
-  }, [matchId])
+  }, [matchId, match, latestIncomingId])
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' })
