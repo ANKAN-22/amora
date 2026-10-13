@@ -393,15 +393,44 @@ export async function markMatchSeen(matchId: string) {
   if (error) scheduleReload()
 }
 
+let sendInFlight = false
+
+function friendlySendError(error: { code?: string; message?: string }) {
+  const code = error.code ?? ''
+  if (code === '23514' || code === '22001') return 'Messages can be up to 500 characters.'
+  if (code === '42501' || code === 'PGRST301' || code === '401') return "You don't have permission to send that."
+  if (code === '23503') return 'This conversation is no longer available.'
+  const note = (error.message ?? '').toLowerCase()
+  if (note.includes('failed to fetch') || note.includes('network')) return "Couldn't send. Check your connection and try again."
+  return "Couldn't send that message. Try again."
+}
+
 export async function sendMessage(matchId: string, text: string) {
   const trimmed = text.trim()
+  if (!trimmed) return { ok: false, message: 'Write a message first.' }
+  if (trimmed.length > 500) return { ok: false, message: 'Messages can be up to 500 characters.' }
+  if (sendInFlight) return { ok: false, message: '' }
+
   const me = getSession().userId
   const match = state.matches.find((item) => item.id === matchId)
-  if (!supabase || !me || !match || !trimmed || trimmed.length > 500 || state.blocks.includes(match.studentId) || state.blockedBy.includes(match.studentId)) return false
-  const { error } = await supabase.from('messages').insert({ match_id: matchId, sender_id: me, body: trimmed })
-  if (error) return false
-  await reloadSocial()
-  return true
+  if (!supabase) return { ok: false, message: "Couldn't send. Check your connection and try again." }
+  if (!me) return { ok: false, message: 'Sign in again to send a message.' }
+  if (!match) return { ok: false, message: 'This conversation is no longer available.' }
+  if (state.blocks.includes(match.studentId) || state.blockedBy.includes(match.studentId)) {
+    return { ok: false, message: "You can't message this student." }
+  }
+
+  sendInFlight = true
+  try {
+    const { error } = await supabase.from('messages').insert({ match_id: matchId, sender_id: me, body: trimmed })
+    if (error) return { ok: false, message: friendlySendError(error) }
+    await reloadSocial()
+    return { ok: true, message: '' }
+  } catch {
+    return { ok: false, message: "Couldn't send. Check your connection and try again." }
+  } finally {
+    sendInFlight = false
+  }
 }
 
 export async function deleteConversation(matchId: string) {

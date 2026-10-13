@@ -29,6 +29,9 @@ export function ChatPage() {
   usePageTitle(student ? student.name : 'Chat')
 
   const [draft, setDraft] = useState('')
+  const [sending, setSending] = useState(false)
+  const [sendError, setSendError] = useState('')
+  const sendingRef = useRef(false)
   const [sheet, setSheet] = useState<SheetMode>(null)
   const [reportMessageId, setReportMessageId] = useState('')
   const endRef = useRef<HTMLDivElement>(null)
@@ -51,7 +54,15 @@ export function ChatPage() {
   }
 
   async function submitMessage() {
-    if (await sendMessage(matchId, draft)) setDraft('')
+    if (sendingRef.current) return
+    sendingRef.current = true
+    setSending(true)
+    setSendError('')
+    const result = await sendMessage(matchId, draft)
+    sendingRef.current = false
+    setSending(false)
+    if (result.ok) setDraft('')
+    else if (result.message) setSendError(result.message)
   }
 
   function fileReport(reason: ReportReason) {
@@ -126,28 +137,38 @@ export function ChatPage() {
       </div>
 
       <form
-        className="flex items-center gap-2 border-t border-line px-3 py-3"
+        className="border-t border-line px-3 py-3"
         onSubmit={(event) => {
           event.preventDefault()
-          submitMessage()
+          void submitMessage()
         }}
       >
-        <input
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          maxLength={500}
-          placeholder="Message"
-          aria-label="Message"
-          className="h-12 min-w-0 flex-1 rounded-full bg-blush px-4 text-sm outline-none placeholder:text-mute"
-        />
-        <button
-          type="submit"
-          aria-label="Send message"
-          disabled={draft.trim().length === 0}
-          className="grid size-12 shrink-0 place-items-center rounded-full bg-coral text-white disabled:opacity-40"
-        >
-          <Send className="size-5" />
-        </button>
+        {sendError ? (
+          <p className="mb-2 text-xs leading-4 text-coral" role="alert">
+            {sendError}
+          </p>
+        ) : null}
+        <div className="flex items-center gap-2">
+          <input
+            value={draft}
+            onChange={(event) => {
+              setDraft(event.target.value)
+              if (sendError) setSendError('')
+            }}
+            maxLength={500}
+            placeholder="Message"
+            aria-label="Message"
+            className="h-12 min-w-0 flex-1 rounded-full bg-blush px-4 text-sm outline-none placeholder:text-mute"
+          />
+          <button
+            type="submit"
+            aria-label="Send message"
+            disabled={sending || draft.trim().length === 0}
+            className="grid size-12 shrink-0 place-items-center rounded-full bg-coral text-white disabled:opacity-40"
+          >
+            <Send className="size-5" />
+          </button>
+        </div>
       </form>
 
       {sheet === 'menu' ? (

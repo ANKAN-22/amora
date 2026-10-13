@@ -437,6 +437,12 @@ declare
   pair_b uuid;
   cutoff timestamptz;
 begin
+  new.body := btrim(coalesce(new.body, ''));
+  if char_length(new.body) < 1 or char_length(new.body) > 500 then
+    raise exception 'Message must be between 1 and 500 characters.'
+      using errcode = '23514';
+  end if;
+
   select user_a, user_b into pair_a, pair_b
   from public.matches
   where id = new.match_id;
