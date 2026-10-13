@@ -205,7 +205,7 @@ export function ChatPage() {
 
       {sheet === 'unmatch' ? (
         <Sheet title={`Unmatch ${student.name.split(' ')[0]}?`} onClose={() => setSheet(null)}>
-          <p className="text-sm leading-5 text-mute">The conversation closes and they leave your matches.</p>
+          <p className="text-sm leading-5 text-mute">This ends the match for both of you. The conversation leaves Matches.</p>
           <Button
             fullWidth
             className="mt-4"

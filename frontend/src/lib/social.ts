@@ -408,14 +408,16 @@ export async function unmatch(matchId: string) {
   const me = getSession().userId
   const match = state.matches.find((item) => item.id === matchId)
   if (!supabase || !me || !match) return
+  const studentId = match.studentId
   commit({
     ...state,
     matches: state.matches.filter((item) => item.id !== matchId),
     messages: state.messages.filter((message) => message.matchId !== matchId),
-    liked: state.liked.filter((id) => id !== match.studentId),
+    liked: state.liked.filter((id) => id !== studentId),
+    incoming: state.incoming.filter((id) => id !== studentId),
   })
-  await supabase.from('matches').delete().eq('id', matchId)
-  await supabase.from('likes').delete().eq('from_id', me).eq('to_id', match.studentId)
+  const { error } = await supabase.rpc('unmatch_student', { match_id: matchId })
+  if (error) scheduleReload()
 }
 
 export async function blockStudent(studentId: string) {

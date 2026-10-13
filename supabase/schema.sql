@@ -311,6 +311,57 @@ create trigger enforce_block
 revoke all on function public.enforce_block() from public;
 grant execute on function public.enforce_block() to authenticated;
 
+-- Closes the match for both people and removes both likes. Messages stay for reviewers.
+create or replace function public.unmatch_student(match_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  me uuid := auth.uid();
+  pair_a uuid;
+  pair_b uuid;
+  open_match boolean;
+begin
+  if me is null or match_id is null then
+    return;
+  end if;
+
+  select user_a, user_b, active
+    into pair_a, pair_b, open_match
+  from public.matches
+  where id = match_id;
+
+  if pair_a is null or not (me in (pair_a, pair_b)) or not open_match then
+    return;
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended(pair_a::text || ':' || pair_b::text, 0));
+
+  select active into open_match
+  from public.matches
+  where id = match_id
+    and me in (user_a, user_b);
+
+  if not coalesce(open_match, false) then
+    return;
+  end if;
+
+  perform set_config('amora.match_write', 'on', true);
+  update public.matches
+  set active = false
+  where id = match_id and active;
+
+  delete from public.likes
+  where (from_id = pair_a and to_id = pair_b)
+     or (from_id = pair_b and to_id = pair_a);
+end;
+$$;
+
+revoke all on function public.unmatch_student(uuid) from public;
+grant execute on function public.unmatch_student(uuid) to authenticated;
+
 create or replace function public.delete_own_account()
 returns void
 language plpgsql
@@ -503,6 +554,7 @@ revoke all on function public.can_use_chat() from public;
 grant execute on function public.is_admin() to authenticated;
 grant execute on function public.like_student(uuid) to authenticated;
 grant execute on function public.block_student(uuid) to authenticated;
+grant execute on function public.unmatch_student(uuid) to authenticated;
 grant execute on function public.delete_own_account() to authenticated;
 grant execute on function public.admin_delete_account(uuid, text) to authenticated;
 grant execute on function public.admin_ban_account(uuid, text) to authenticated;
@@ -523,7 +575,8 @@ grant select, insert, delete on public.likes to authenticated;
 grant select, insert, delete on public.passes to authenticated;
 grant select, insert, delete on public.hides to authenticated;
 grant select, insert, delete on public.blocks to authenticated;
-grant select, delete on public.matches to authenticated;
+grant select on public.matches to authenticated;
+revoke delete on public.matches from authenticated;
 revoke update on public.matches from authenticated;
 grant update (seen_a, seen_b) on public.matches to authenticated;
 grant select, insert, delete on public.messages to authenticated;
@@ -653,18 +706,8 @@ create policy "matches update" on public.matches
   )
   with check (auth.uid() in (user_a, user_b));
 
+-- Students close a match through unmatch_student. A direct delete would remove the messages.
 drop policy if exists "matches delete" on public.matches;
-create policy "matches delete" on public.matches
-  for delete to authenticated
-  using (
-    auth.uid() in (user_a, user_b)
-    and active
-    and not exists (
-      select 1 from public.blocks
-      where (blocker_id = matches.user_a and blocked_id = matches.user_b)
-         or (blocker_id = matches.user_b and blocked_id = matches.user_a)
-    )
-  );
 
 create or replace function public.protect_match()
 returns trigger
