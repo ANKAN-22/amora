@@ -16,9 +16,10 @@ export function BottomNav() {
   const social = useSocial()
   const settings = useSettings()
   useEffect(() => subscribeMessages(), [])
+  const unreadChats = visibleMatches(social).filter((match) => isUnread(match, social)).length
   const badges: Record<string, number> = {
     '/likes': settings.notifyLikes ? incomingLikes(social).length : 0,
-    '/matches': settings.notifyMatches ? visibleMatches(social).filter((match) => isUnread(match, social)).length : 0,
+    '/matches': settings.notifyMatches && settings.notifyMessages ? unreadChats : 0,
   }
 
   return (

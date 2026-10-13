@@ -26,7 +26,7 @@ export function NotificationsPage() {
         <Toggle
           checked={settings.notifyMessages}
           label="Messages"
-          detail="Saved for message alerts."
+          detail="Include unread chats in the Matches tab count."
           onChange={(notifyMessages) => updateSettings({ notifyMessages })}
         />
       </div>
