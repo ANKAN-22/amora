@@ -459,7 +459,7 @@ grant select, insert, delete on public.likes to authenticated;
 grant select, insert, delete on public.passes to authenticated;
 grant select, insert, delete on public.hides to authenticated;
 grant select, insert, delete on public.blocks to authenticated;
-grant select, insert, update, delete on public.matches to authenticated;
+grant select, update, delete on public.matches to authenticated;
 grant select, insert, delete on public.messages to authenticated;
 grant select, insert, update on public.reports to authenticated;
 
@@ -539,10 +539,11 @@ create policy "matches read" on public.matches
   for select to authenticated
   using (auth.uid() in (user_a, user_b) or public.is_admin());
 
+-- Matches are created only by like_student. A signed-in student cannot insert a match row
+-- and then read or send in that conversation.
 drop policy if exists "matches insert" on public.matches;
-create policy "matches insert" on public.matches
-  for insert to authenticated
-  with check (auth.uid() in (user_a, user_b));
+revoke insert on public.matches from authenticated;
+revoke insert on public.matches from anon;
 
 drop policy if exists "matches update" on public.matches;
 create policy "matches update" on public.matches
