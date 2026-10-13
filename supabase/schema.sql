@@ -182,6 +182,11 @@ begin
     return null;
   end if;
 
+  pair_a := least(me, target);
+  pair_b := greatest(me, target);
+  -- One like for this pair runs at a time, so two simultaneous likes cannot both miss each other.
+  perform pg_advisory_xact_lock(hashtextextended(pair_a::text || ':' || pair_b::text, 0));
+
   if not exists (
     select 1 from public.profiles
     where id = target and verification_status = 'APPROVED' and is_admin = false
@@ -205,14 +210,6 @@ begin
 
   if not exists (select 1 from public.likes where from_id = target and to_id = me) then
     return null;
-  end if;
-
-  if me < target then
-    pair_a := me;
-    pair_b := target;
-  else
-    pair_a := target;
-    pair_b := me;
   end if;
 
   insert into public.matches (user_a, user_b) values (pair_a, pair_b)
