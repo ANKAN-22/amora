@@ -140,7 +140,7 @@ export function ChatPage() {
       </div>
 
       <form
-        className="border-t border-line px-3 py-3"
+        className="border-t border-line px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
         onSubmit={(event) => {
           event.preventDefault()
           void submitMessage()

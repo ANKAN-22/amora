@@ -45,7 +45,7 @@ export function AppShell() {
       >
         <Outlet />
       </main>
-      <BottomNav />
+      {chat ? null : <BottomNav />}
     </PhoneFrame>
   )
 }
