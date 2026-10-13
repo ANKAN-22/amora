@@ -6,15 +6,7 @@ import { PageHeading } from '@/shared/PageHeading.tsx'
 import { StudentAvatar } from '@/shared/StudentAvatar.tsx'
 import { usePageTitle } from '@/shared/usePageTitle.ts'
 import { isUnread, lastMessage, personById, useSocial, visibleMatches } from '@/lib/social.ts'
-
-function shortTime(iso: string) {
-  const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60000)
-  if (minutes < 1) return 'Now'
-  if (minutes < 60) return `${minutes}m`
-  const hours = Math.round(minutes / 60)
-  if (hours < 24) return `${hours}h`
-  return `${Math.round(hours / 24)}d`
-}
+import { shortTime } from '@/lib/time.ts'
 
 export function MatchesPage() {
   usePageTitle('Matches')

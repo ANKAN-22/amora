@@ -18,6 +18,7 @@ import {
   useSocial,
   type ReportReason,
 } from '@/lib/social.ts'
+import { sameTimeGroup, shortTime } from '@/lib/time.ts'
 
 type SheetMode = 'menu' | 'report-user' | 'report-message' | 'unmatch' | 'block' | 'delete' | 'saved' | null
 
@@ -110,30 +111,39 @@ export function ChatPage() {
           </p>
         ) : (
           <ul className="grid gap-2">
-            {messages.map((message) => (
-              <li key={message.id} className={message.from === 'me' ? 'flex justify-end' : 'flex items-end gap-1'}>
-                <p
-                  className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm leading-5 ${
-                    message.from === 'me' ? 'rounded-br-md bg-coral text-white' : 'rounded-bl-md bg-blush text-ink'
-                  }`}
-                >
-                  {message.text}
-                </p>
-                {message.from === 'them' ? (
-                  <button
-                    type="button"
-                    aria-label="Report message"
-                    className="grid size-8 place-items-center rounded-full text-mute"
-                    onClick={() => {
-                      setReportMessageId(message.id)
-                      setSheet('report-message')
-                    }}
-                  >
-                    <Flag className="size-3.5" />
-                  </button>
-                ) : null}
-              </li>
-            ))}
+            {messages.map((message, index) => {
+              const previous = messages[index - 1]
+              const showTime = !previous || !sameTimeGroup(previous.createdAt, message.createdAt)
+              return (
+                <li key={message.id} className="grid gap-2">
+                  {showTime ? (
+                    <p className="text-center text-[11px] font-semibold text-mute">{shortTime(message.createdAt)}</p>
+                  ) : null}
+                  <div className={message.from === 'me' ? 'flex justify-end' : 'flex items-end gap-1'}>
+                    <p
+                      className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm leading-5 ${
+                        message.from === 'me' ? 'rounded-br-md bg-coral text-white' : 'rounded-bl-md bg-blush text-ink'
+                      }`}
+                    >
+                      {message.text}
+                    </p>
+                    {message.from === 'them' ? (
+                      <button
+                        type="button"
+                        aria-label="Report message"
+                        className="grid size-8 place-items-center rounded-full text-mute"
+                        onClick={() => {
+                          setReportMessageId(message.id)
+                          setSheet('report-message')
+                        }}
+                      >
+                        <Flag className="size-3.5" />
+                      </button>
+                    ) : null}
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         )}
         <div ref={endRef} />
