@@ -401,7 +401,8 @@ export async function sendMessage(matchId: string, text: string) {
 export async function deleteConversation(matchId: string) {
   if (!supabase) return
   commit({ ...state, messages: state.messages.filter((message) => message.matchId !== matchId) })
-  await supabase.from('messages').delete().eq('match_id', matchId)
+  const { error } = await supabase.rpc('clear_conversation', { match_id: matchId })
+  if (error) scheduleReload()
 }
 
 export async function unmatch(matchId: string) {

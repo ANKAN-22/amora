@@ -188,7 +188,7 @@ export function ChatPage() {
       {sheet === 'delete' ? (
         <Sheet title="Delete conversation?" onClose={() => setSheet(null)}>
           <p className="text-sm leading-5 text-mute">
-            Every message with {student.name.split(' ')[0]} goes away. The match stays.
+            This removes the messages for both you and {student.name.split(' ')[0]}. The match stays.
           </p>
           <Button
             fullWidth
@@ -198,7 +198,7 @@ export function ChatPage() {
               setSheet(null)
             }}
           >
-            Delete messages
+            Delete for both
           </Button>
         </Sheet>
       ) : null}
