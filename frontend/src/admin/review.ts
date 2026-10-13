@@ -273,6 +273,7 @@ export async function listReports(): Promise<ReviewReport[]> {
     reporter_id: string
     target_id: string
     message_id: string | null
+    message_excerpt: string
     reason: string
     resolved: boolean
     created_at: string
@@ -280,8 +281,8 @@ export async function listReports(): Promise<ReviewReport[]> {
     action_taken: string
   }>((from, to) =>
     client
-      .from('reports')
-      .select('id, reporter_id, target_id, message_id, reason, resolved, created_at, reviewed_at, action_taken')
+      .from('report_reviews')
+      .select('id, reporter_id, target_id, message_id, message_excerpt, reason, resolved, created_at, reviewed_at, action_taken')
       .order('created_at', { ascending: false })
       .order('id')
       .range(from, to),
@@ -307,7 +308,7 @@ export async function listReports(): Promise<ReviewReport[]> {
     id: report.id,
     reason: report.reason,
     messageId: report.message_id ?? '',
-    messageBody: report.message_id ? (bodies.get(report.message_id) ?? '') : '',
+    messageBody: report.message_excerpt || (report.message_id ? (bodies.get(report.message_id) ?? '') : ''),
     resolved: report.resolved,
     createdAt: report.created_at,
     reviewedAt: report.reviewed_at,

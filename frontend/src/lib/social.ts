@@ -224,7 +224,7 @@ export async function reloadSocial() {
     supabase.from('hides').select('hidden_id').eq('user_id', me),
     supabase.from('blocks').select('blocker_id, blocked_id').or(`blocker_id.eq.${me},blocked_id.eq.${me}`),
     supabase.from('matches').select('*').or(`user_a.eq.${me},user_b.eq.${me}`),
-    supabase.from('reports').select('*').eq('reporter_id', me),
+    supabase.from('reports').select('id, target_id, match_id, message_id, reason, created_at, resolved').eq('reporter_id', me),
   ])
 
   const directoryRows = (directoryResult.data ?? []) as DirectoryRow[]
