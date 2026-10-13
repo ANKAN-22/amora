@@ -21,6 +21,11 @@ export function AppShell() {
     return <Navigate to="/profile-setup" replace />
   }
 
+  const inChat = pathname === '/matches' || pathname.startsWith('/chat/')
+  if (inChat && account.age < 18) {
+    return <Navigate to="/discover" replace />
+  }
+
   const chat = pathname.startsWith('/chat/')
   const immersive = chat || pathname.startsWith('/student/')
 

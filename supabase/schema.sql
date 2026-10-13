@@ -407,6 +407,27 @@ begin
 end;
 $$;
 
+alter table public.profiles add column if not exists account_status text not null default 'ACTIVE';
+
+-- Chat is limited to a signed-in student who is approved, 18 or older, and not banned.
+create or replace function public.can_use_chat()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.profiles
+    where id = auth.uid()
+      and is_admin = false
+      and verification_status = 'APPROVED'
+      and age >= 18
+      and account_status = 'ACTIVE'
+  );
+$$;
+
 revoke all on function public.is_admin() from public;
 revoke all on function public.like_student(uuid) from public;
 revoke all on function public.block_student(uuid) from public;
@@ -414,6 +435,7 @@ revoke all on function public.delete_own_account() from public;
 revoke all on function public.admin_delete_account(uuid, text) from public;
 revoke all on function public.admin_ban_account(uuid, text) from public;
 revoke all on function public.admin_unban_account(uuid) from public;
+revoke all on function public.can_use_chat() from public;
 grant execute on function public.is_admin() to authenticated;
 grant execute on function public.like_student(uuid) to authenticated;
 grant execute on function public.block_student(uuid) to authenticated;
@@ -421,6 +443,7 @@ grant execute on function public.delete_own_account() to authenticated;
 grant execute on function public.admin_delete_account(uuid, text) to authenticated;
 grant execute on function public.admin_ban_account(uuid, text) to authenticated;
 grant execute on function public.admin_unban_account(uuid) to authenticated;
+grant execute on function public.can_use_chat() to authenticated;
 
 alter table public.profiles enable row level security;
 alter table public.likes enable row level security;
@@ -568,10 +591,13 @@ create policy "messages read" on public.messages
   for select to authenticated
   using (
     public.is_admin()
-    or exists (
-      select 1 from public.matches
-      where matches.id = messages.match_id
-        and auth.uid() in (matches.user_a, matches.user_b)
+    or (
+      public.can_use_chat()
+      and exists (
+        select 1 from public.matches
+        where matches.id = messages.match_id
+          and auth.uid() in (matches.user_a, matches.user_b)
+      )
     )
   );
 
@@ -579,7 +605,8 @@ drop policy if exists "messages insert" on public.messages;
 create policy "messages insert" on public.messages
   for insert to authenticated
   with check (
-    sender_id = auth.uid()
+    public.can_use_chat()
+    and sender_id = auth.uid()
     and exists (
       select 1 from public.matches
       where matches.id = messages.match_id
