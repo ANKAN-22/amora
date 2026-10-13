@@ -23,6 +23,7 @@ export type Match = {
   seen: boolean
   iAmUserA: boolean
   historyCutoff: string
+  hasIncoming: boolean
 }
 
 export type ChatMessage = {
@@ -56,6 +57,7 @@ export type SocialState = {
   reports: Report[]
   people: Record<string, Person>
   directory: Person[]
+  threadOlder: Record<string, boolean>
 }
 
 export type LikeResult = {
@@ -93,6 +95,7 @@ const emptyState = (ready: boolean): SocialState => ({
   reports: [],
   people: {},
   directory: [],
+  threadOlder: {},
 })
 
 let state = emptyState(false)
@@ -176,11 +179,14 @@ export function visibleMatches(social: SocialState = state) {
 export function messagesFor(matchId: string, social: SocialState = state) {
   const match = social.matches.find((item) => item.id === matchId)
   const cutoff = match?.historyCutoff ?? ''
-  return social.messages.filter((message) => message.matchId === matchId && (!cutoff || message.createdAt > cutoff))
+  return social.messages
+    .filter((message) => message.matchId === matchId && (!cutoff || message.createdAt > cutoff))
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
 }
 
 export function isUnread(match: Match, social: SocialState = state) {
   if (match.seen) return false
+  if (match.hasIncoming) return true
   return messagesFor(match.id, social).some((message) => message.from === 'them')
 }
 
@@ -228,7 +234,7 @@ export async function reloadSocial() {
     return
   }
 
-  const [directoryResult, likesResult, passesResult, hidesResult, blocksResult, matchesResult, reportsResult] = await Promise.all([
+  const [directoryResult, likesResult, passesResult, hidesResult, blocksResult, matchesResult, reportsResult, previewResult] = await Promise.all([
     supabase.from('directory').select('*'),
     supabase.from('likes').select('from_id, to_id').or(`from_id.eq.${me},to_id.eq.${me}`),
     supabase.from('passes').select('to_id').eq('from_id', me),
@@ -236,6 +242,7 @@ export async function reloadSocial() {
     supabase.from('blocks').select('blocker_id, blocked_id').or(`blocker_id.eq.${me},blocked_id.eq.${me}`),
     supabase.from('matches').select('*').or(`user_a.eq.${me},user_b.eq.${me}`),
     supabase.from('reports').select('id, target_id, match_id, message_id, reason, created_at, resolved').eq('reporter_id', me),
+    supabase.rpc('match_previews'),
   ])
 
   const directoryRows = (directoryResult.data ?? []) as DirectoryRow[]
@@ -263,17 +270,15 @@ export async function reloadSocial() {
     resolved: boolean
   }[]
 
-  const matchIds = matchRows.map((match) => match.id)
-  const messageResult = matchIds.length
-    ? await supabase.from('messages').select('*').in('match_id', matchIds).order('created_at', { ascending: true })
-    : { data: [] }
-  const messageRows = (messageResult.data ?? []) as {
-    id: string
+  const previewRows = (previewResult.data ?? []) as {
     match_id: string
-    sender_id: string
-    body: string
-    created_at: string
+    has_incoming: boolean
+    message_id: string | null
+    sender_id: string | null
+    body: string | null
+    created_at: string | null
   }[]
+  const incomingByMatch = new Map(previewRows.map((row) => [row.match_id, row.has_incoming]))
 
   const photoPaths = directoryRows.flatMap((row) => row.photo_paths ?? [])
   const photos = await signedPhotos(photoPaths)
@@ -313,14 +318,20 @@ export async function reloadSocial() {
       seen: match.user_a === me ? match.seen_a : match.seen_b,
       iAmUserA: match.user_a === me,
       historyCutoff: match.history_cutoff ?? '',
+      hasIncoming: incomingByMatch.get(match.id) ?? false,
     })),
-    messages: messageRows.map((message) => ({
-      id: message.id,
-      matchId: message.match_id,
-      from: message.sender_id === me ? 'me' : 'them',
-      text: message.body,
-      createdAt: message.created_at,
-    })),
+    messages: [
+      ...state.messages.filter((message) => state.threadOlder[message.matchId] !== undefined),
+      ...previewRows
+        .filter((row) => row.message_id && row.sender_id && row.body && row.created_at && state.threadOlder[row.match_id] === undefined)
+        .map((row) => ({
+          id: row.message_id as string,
+          matchId: row.match_id,
+          from: row.sender_id === me ? 'me' as const : 'them' as const,
+          text: row.body as string,
+          createdAt: row.created_at as string,
+        })),
+    ],
     blocks: blockRows.filter((row) => row.blocker_id === me).map((row) => row.blocked_id),
     blockedBy: blockRows.filter((row) => row.blocked_id === me).map((row) => row.blocker_id),
     hidden: hideRows.map((row) => row.hidden_id),
@@ -337,6 +348,7 @@ export async function reloadSocial() {
       })),
     people,
     directory,
+    threadOlder: state.threadOlder,
   })
 }
 
@@ -381,19 +393,77 @@ function messageFrom(row: MessageRow, me: string): ChatMessage {
   }
 }
 
+const MESSAGE_PAGE = 40
+
+async function fetchMessagePage(matchId: string, before?: { createdAt: string; id: string }) {
+  if (!supabase) return null
+  let query = supabase
+    .from('messages')
+    .select('id, match_id, sender_id, body, created_at')
+    .eq('match_id', matchId)
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(before ? MESSAGE_PAGE + 2 : MESSAGE_PAGE + 1)
+  if (before) query = query.lte('created_at', before.createdAt)
+  const { data, error } = await query
+  if (error || !data) return null
+  return data as MessageRow[]
+}
+
+export async function loadThread(matchId: string) {
+  const me = getSession().userId
+  const rows = await fetchMessagePage(matchId)
+  if (!me || !rows) return
+  const hasOlder = rows.length > MESSAGE_PAGE
+  const page = rows.slice(0, MESSAGE_PAGE).map((row) => messageFrom(row, me)).reverse()
+  const pageIds = new Set(page.map((message) => message.id))
+  const newest = page[page.length - 1]?.createdAt ?? ''
+  const extras = state.messages.filter((message) => message.matchId === matchId && !pageIds.has(message.id) && message.createdAt >= newest)
+  const messages = [...state.messages.filter((message) => message.matchId !== matchId), ...page, ...extras].sort(
+    (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
+  )
+  commit({ ...state, messages, threadOlder: { ...state.threadOlder, [matchId]: hasOlder } })
+}
+
+export async function loadOlderMessages(matchId: string) {
+  const me = getSession().userId
+  const oldest = state.messages
+    .filter((message) => message.matchId === matchId)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))[0]
+  if (!me || !oldest) return
+  const rows = await fetchMessagePage(matchId, { createdAt: oldest.createdAt, id: oldest.id })
+  if (!rows) return
+  const olderRows = rows.filter((row) => row.id !== oldest.id)
+  const older = olderRows.slice(0, MESSAGE_PAGE).map((row) => messageFrom(row, me))
+  const known = new Set(state.messages.map((message) => message.id))
+  const fresh = older.filter((message) => !known.has(message.id))
+  const messages = [...fresh, ...state.messages].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+  commit({
+    ...state,
+    messages,
+    threadOlder: { ...state.threadOlder, [matchId]: olderRows.length > MESSAGE_PAGE },
+  })
+}
+
 function appendMessage(message: ChatMessage) {
   if (state.messages.some((item) => item.id === message.id)) return
   const match = state.matches.find((item) => item.id === message.matchId)
   if (match?.historyCutoff && message.createdAt <= match.historyCutoff) return
   const messages = [...state.messages, message].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
-  commit({ ...state, messages })
+  const matches = message.from === 'them'
+    ? state.matches.map((item) => (item.id === message.matchId ? { ...item, hasIncoming: true } : item))
+    : state.matches
+  commit({ ...state, messages, matches })
 }
 
 function removeMatch(matchId: string) {
+  const threadOlder = { ...state.threadOlder }
+  delete threadOlder[matchId]
   commit({
     ...state,
     matches: state.matches.filter((item) => item.id !== matchId),
     messages: state.messages.filter((item) => item.matchId !== matchId),
+    threadOlder,
   })
 }
 
@@ -406,18 +476,24 @@ function applyMatch(row: MatchRow) {
   }
   const studentId = row.user_a === me ? row.user_b : row.user_a
   const previous = state.matches.find((item) => item.id === row.id)
+  const historyCutoff = row.history_cutoff ?? previous?.historyCutoff ?? ''
+  const messages = state.messages.filter((item) => item.matchId !== row.id || !historyCutoff || item.createdAt > historyCutoff)
+  const cutoffChanged = historyCutoff !== (previous?.historyCutoff ?? '')
+  const hasIncoming = cutoffChanged
+    ? messages.some((item) => item.matchId === row.id && item.from === 'them')
+    : (previous?.hasIncoming ?? false)
   const next: Match = {
     id: row.id,
     studentId,
     createdAt: row.created_at,
     seen: row.user_a === me ? Boolean(row.seen_a) : Boolean(row.seen_b),
     iAmUserA: row.user_a === me,
-    historyCutoff: row.history_cutoff ?? previous?.historyCutoff ?? '',
+    historyCutoff,
+    hasIncoming,
   }
   const matches = state.matches.some((item) => item.id === row.id)
     ? state.matches.map((item) => (item.id === row.id ? next : item))
     : [...state.matches, next]
-  const messages = state.messages.filter((item) => item.matchId !== row.id || !next.historyCutoff || item.createdAt > next.historyCutoff)
   commit({ ...state, matches, messages })
   if (!state.people[studentId]) scheduleReload()
 }
@@ -606,7 +682,12 @@ export async function sendMessage(matchId: string, text: string) {
 
 export async function deleteConversation(matchId: string) {
   if (!supabase) return
-  commit({ ...state, messages: state.messages.filter((message) => message.matchId !== matchId) })
+  commit({
+    ...state,
+    matches: state.matches.map((item) => (item.id === matchId ? { ...item, hasIncoming: false } : item)),
+    messages: state.messages.filter((message) => message.matchId !== matchId),
+    threadOlder: { ...state.threadOlder, [matchId]: false },
+  })
   const { error } = await supabase.rpc('clear_conversation', { match_id: matchId })
   if (error) scheduleReload()
 }
@@ -616,12 +697,15 @@ export async function unmatch(matchId: string) {
   const match = state.matches.find((item) => item.id === matchId)
   if (!supabase || !me || !match) return
   const studentId = match.studentId
+  const threadOlder = { ...state.threadOlder }
+  delete threadOlder[matchId]
   commit({
     ...state,
     matches: state.matches.filter((item) => item.id !== matchId),
     messages: state.messages.filter((message) => message.matchId !== matchId),
     liked: state.liked.filter((id) => id !== studentId),
     incoming: state.incoming.filter((id) => id !== studentId),
+    threadOlder,
   })
   const { error } = await supabase.rpc('unmatch_student', { match_id: matchId })
   if (error) scheduleReload()
@@ -630,6 +714,8 @@ export async function unmatch(matchId: string) {
 export async function blockStudent(studentId: string) {
   if (!supabase) return
   const removed = new Set(state.matches.filter((match) => match.studentId === studentId).map((match) => match.id))
+  const threadOlder = { ...state.threadOlder }
+  for (const id of removed) delete threadOlder[id]
   commit({
     ...state,
     blocks: state.blocks.includes(studentId) ? state.blocks : [...state.blocks, studentId],
@@ -638,6 +724,7 @@ export async function blockStudent(studentId: string) {
     messages: state.messages.filter((message) => !removed.has(message.matchId)),
     liked: state.liked.filter((id) => id !== studentId),
     incoming: state.incoming.filter((id) => id !== studentId),
+    threadOlder,
   })
   await supabase.rpc('block_student', { target: studentId })
 }

@@ -8,6 +8,8 @@ import { usePageTitle } from '@/shared/usePageTitle.ts'
 import {
   blockStudent,
   deleteConversation,
+  loadOlderMessages,
+  loadThread,
   markMatchSeen,
   messagesFor,
   subscribeMessages,
@@ -37,11 +39,18 @@ export function ChatPage() {
   const [sheet, setSheet] = useState<SheetMode>(null)
   const [reportMessageId, setReportMessageId] = useState('')
   const endRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<HTMLTextAreaElement>(null)
+  const [loadingOlder, setLoadingOlder] = useState(false)
   const messages = messagesFor(matchId, social)
+  const newestId = messages[messages.length - 1]?.id ?? ''
   const latestIncomingId = messages.reduce((id, message) => (message.from === 'them' ? message.id : id), '')
 
   useEffect(() => subscribeMessages(), [matchId])
+
+  useEffect(() => {
+    void loadThread(matchId)
+  }, [matchId])
 
   useEffect(() => {
     if (!match || match.seen) return
@@ -50,7 +59,7 @@ export function ChatPage() {
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' })
-  }, [messages.length])
+  }, [newestId])
 
   useEffect(() => {
     const box = composerRef.current
@@ -112,7 +121,28 @@ export function ChatPage() {
         </button>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {social.threadOlder[matchId] ? (
+          <button
+            type="button"
+            className="mx-auto mb-3 block text-xs font-semibold text-coral disabled:opacity-40"
+            disabled={loadingOlder}
+            onClick={() => {
+              const scroller = listRef.current
+              const before = scroller?.scrollHeight ?? 0
+              setLoadingOlder(true)
+              void loadOlderMessages(matchId).then(() => {
+                setLoadingOlder(false)
+                requestAnimationFrame(() => {
+                  if (!scroller) return
+                  scroller.scrollTop += scroller.scrollHeight - before
+                })
+              })
+            }}
+          >
+            {loadingOlder ? 'Loading…' : 'Load older messages'}
+          </button>
+        ) : null}
         {messages.length === 0 ? (
           <p className="mx-auto mt-8 max-w-[16rem] text-center text-sm leading-5 text-mute">
             You matched with {student.name.split(' ')[0]}. Say hello.
