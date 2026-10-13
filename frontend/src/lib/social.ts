@@ -22,6 +22,7 @@ export type Match = {
   createdAt: string
   seen: boolean
   iAmUserA: boolean
+  historyCutoff: string
 }
 
 export type ChatMessage = {
@@ -97,7 +98,10 @@ const emptyState = (ready: boolean): SocialState => ({
 let state = emptyState(false)
 const listeners = new Set<() => void>()
 let reloadTimer: ReturnType<typeof setTimeout> | null = null
-let listening = false
+let channel: ReturnType<NonNullable<typeof supabase>['channel']> | null = null
+let messageChannel: ReturnType<NonNullable<typeof supabase>['channel']> | null = null
+let messageWatchers = 0
+let loadedFor: string | null = null
 
 function emit() {
   for (const listener of listeners) listener()
@@ -170,12 +174,14 @@ export function visibleMatches(social: SocialState = state) {
 }
 
 export function messagesFor(matchId: string, social: SocialState = state) {
-  return social.messages.filter((message) => message.matchId === matchId)
+  const match = social.matches.find((item) => item.id === matchId)
+  const cutoff = match?.historyCutoff ?? ''
+  return social.messages.filter((message) => message.matchId === matchId && (!cutoff || message.createdAt > cutoff))
 }
 
 export function isUnread(match: Match, social: SocialState = state) {
   if (match.seen) return false
-  return social.messages.some((message) => message.matchId === match.id && message.from === 'them')
+  return messagesFor(match.id, social).some((message) => message.from === 'them')
 }
 
 export function lastMessage(matchId: string, social: SocialState = state) {
@@ -244,6 +250,8 @@ export async function reloadSocial() {
     created_at: string
     seen_a: boolean
     seen_b: boolean
+    active?: boolean
+    history_cutoff?: string
   }[]
   const reportRows = (reportsResult.data ?? []) as {
     id: string
@@ -304,6 +312,7 @@ export async function reloadSocial() {
       createdAt: match.created_at,
       seen: match.user_a === me ? match.seen_a : match.seen_b,
       iAmUserA: match.user_a === me,
+      historyCutoff: match.history_cutoff ?? '',
     })),
     messages: messageRows.map((message) => ({
       id: message.id,
@@ -338,24 +347,182 @@ function scheduleReload() {
   }, 250)
 }
 
+type MatchRow = {
+  id: string
+  user_a: string
+  user_b: string
+  created_at: string
+  seen_a: boolean
+  seen_b: boolean
+  active?: boolean
+  history_cutoff?: string
+}
+
+type MessageRow = {
+  id: string
+  match_id: string
+  sender_id: string
+  body: string
+  created_at: string
+}
+
+type LikeRow = {
+  from_id?: string
+  to_id?: string
+}
+
+function messageFrom(row: MessageRow, me: string): ChatMessage {
+  return {
+    id: row.id,
+    matchId: row.match_id,
+    from: row.sender_id === me ? 'me' : 'them',
+    text: row.body,
+    createdAt: row.created_at,
+  }
+}
+
+function appendMessage(message: ChatMessage) {
+  if (state.messages.some((item) => item.id === message.id)) return
+  const match = state.matches.find((item) => item.id === message.matchId)
+  if (match?.historyCutoff && message.createdAt <= match.historyCutoff) return
+  const messages = [...state.messages, message].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+  commit({ ...state, messages })
+}
+
+function removeMatch(matchId: string) {
+  commit({
+    ...state,
+    matches: state.matches.filter((item) => item.id !== matchId),
+    messages: state.messages.filter((item) => item.matchId !== matchId),
+  })
+}
+
+function applyMatch(row: MatchRow) {
+  const me = getSession().userId
+  if (!me || !row.id || !row.user_a || !row.user_b) return
+  if (row.active === false) {
+    removeMatch(row.id)
+    return
+  }
+  const studentId = row.user_a === me ? row.user_b : row.user_a
+  const previous = state.matches.find((item) => item.id === row.id)
+  const next: Match = {
+    id: row.id,
+    studentId,
+    createdAt: row.created_at,
+    seen: row.user_a === me ? Boolean(row.seen_a) : Boolean(row.seen_b),
+    iAmUserA: row.user_a === me,
+    historyCutoff: row.history_cutoff ?? previous?.historyCutoff ?? '',
+  }
+  const matches = state.matches.some((item) => item.id === row.id)
+    ? state.matches.map((item) => (item.id === row.id ? next : item))
+    : [...state.matches, next]
+  const messages = state.messages.filter((item) => item.matchId !== row.id || !next.historyCutoff || item.createdAt > next.historyCutoff)
+  commit({ ...state, matches, messages })
+  if (!state.people[studentId]) scheduleReload()
+}
+
+function applyLike(eventType: string, row: LikeRow) {
+  const me = getSession().userId
+  if (!me || !row.from_id || !row.to_id) return
+  if (row.from_id !== me && row.to_id !== me) return
+  if (eventType === 'DELETE') {
+    commit({
+      ...state,
+      liked: state.liked.filter((id) => !(row.from_id === me && id === row.to_id)),
+      incoming: state.incoming.filter((id) => !(row.to_id === me && id === row.from_id)),
+    })
+    return
+  }
+  if (eventType !== 'INSERT') return
+  const liked = row.from_id === me && !state.liked.includes(row.to_id) ? [...state.liked, row.to_id] : state.liked
+  const incoming = row.to_id === me && !state.incoming.includes(row.from_id) ? [...state.incoming, row.from_id] : state.incoming
+  if (liked !== state.liked || incoming !== state.incoming) commit({ ...state, liked, incoming })
+}
+
+function applyRealtime(table: string, eventType: string, next: unknown, previous: unknown) {
+  if (table === 'messages') {
+    const row = (eventType === 'DELETE' ? previous : next) as MessageRow
+    const me = getSession().userId
+    if (!me || !row?.id) return
+    if (eventType === 'DELETE') {
+      commit({ ...state, messages: state.messages.filter((item) => item.id !== row.id) })
+      return
+    }
+    if (!row.match_id || !row.created_at) return
+    appendMessage(messageFrom(row, me))
+    return
+  }
+  if (table === 'matches') {
+    const row = (eventType === 'DELETE' ? previous : next) as MatchRow
+    if (eventType === 'DELETE') {
+      if (row?.id) removeMatch(row.id)
+      return
+    }
+    if (!row?.id || (row.active === undefined && !row.user_a)) {
+      scheduleReload()
+      return
+    }
+    applyMatch(row)
+    return
+  }
+  if (table === 'likes') applyLike(eventType, (eventType === 'DELETE' ? previous : next) as LikeRow)
+}
+
+function stopListen() {
+  if (reloadTimer) clearTimeout(reloadTimer)
+  reloadTimer = null
+  if (supabase && channel) void supabase.removeChannel(channel)
+  if (supabase && messageChannel) void supabase.removeChannel(messageChannel)
+  channel = null
+  messageChannel = null
+}
+
 function listen() {
-  if (!supabase || listening) return
-  listening = true
-  void supabase
+  if (!supabase || channel) return
+  channel = supabase
     .channel('amora-social')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'likes' }, scheduleReload)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'matches' }, scheduleReload)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, scheduleReload)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'likes' }, (payload) => {
+      applyRealtime('likes', payload.eventType, payload.new, payload.old)
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'matches' }, (payload) => {
+      applyRealtime('matches', payload.eventType, payload.new, payload.old)
+    })
     .subscribe()
+}
+
+// One message channel, shared by the open chat and the Matches badge.
+// Leaving the chat releases that screen's hold. The channel closes when nothing is listening.
+export function subscribeMessages() {
+  if (!supabase) return () => {}
+  messageWatchers += 1
+  if (!messageChannel) {
+    messageChannel = supabase
+      .channel('amora-messages')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
+        applyRealtime('messages', payload.eventType, payload.new, payload.old)
+      })
+      .subscribe()
+  }
+  return () => {
+    messageWatchers = Math.max(0, messageWatchers - 1)
+    if (messageWatchers > 0 || !supabase || !messageChannel) return
+    void supabase.removeChannel(messageChannel)
+    messageChannel = null
+  }
 }
 
 subscribeSession(() => {
   const userId = getSession().userId
   if (!getSession().ready) return
   if (!userId) {
+    loadedFor = null
+    stopListen()
     commit(emptyState(true))
     return
   }
+  if (loadedFor === userId) return
+  loadedFor = userId
   listen()
   void reloadSocial()
 })
@@ -422,9 +589,13 @@ export async function sendMessage(matchId: string, text: string) {
 
   sendInFlight = true
   try {
-    const { error } = await supabase.from('messages').insert({ match_id: matchId, sender_id: me, body: trimmed })
+    const { data, error } = await supabase
+      .from('messages')
+      .insert({ match_id: matchId, sender_id: me, body: trimmed })
+      .select('id, match_id, sender_id, body, created_at')
+      .single()
     if (error) return { ok: false, message: friendlySendError(error) }
-    await reloadSocial()
+    if (data) appendMessage(messageFrom(data, me))
     return { ok: true, message: '' }
   } catch {
     return { ok: false, message: "Couldn't send. Check your connection and try again." }

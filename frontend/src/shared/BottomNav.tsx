@@ -1,6 +1,7 @@
 import { Compass, Heart, MessageCircle, UserRound } from 'lucide-react'
+import { useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { incomingLikes, isUnread, useSocial, visibleMatches } from '@/lib/social.ts'
+import { incomingLikes, isUnread, subscribeMessages, useSocial, visibleMatches } from '@/lib/social.ts'
 import { useSettings } from '@/lib/settings.ts'
 
 const tabs = [
@@ -14,6 +15,7 @@ export function BottomNav() {
   const { pathname } = useLocation()
   const social = useSocial()
   const settings = useSettings()
+  useEffect(() => subscribeMessages(), [])
   const badges: Record<string, number> = {
     '/likes': settings.notifyLikes ? incomingLikes(social).length : 0,
     '/matches': settings.notifyMatches ? visibleMatches(social).filter((match) => isUnread(match, social)).length : 0,

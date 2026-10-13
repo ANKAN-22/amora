@@ -10,6 +10,7 @@ import {
   deleteConversation,
   markMatchSeen,
   messagesFor,
+  subscribeMessages,
   personById,
   reportStudent,
   sendMessage,
@@ -37,6 +38,8 @@ export function ChatPage() {
   const endRef = useRef<HTMLDivElement>(null)
   const messages = messagesFor(matchId, social)
   const latestIncomingId = messages.reduce((id, message) => (message.from === 'them' ? message.id : id), '')
+
+  useEffect(() => subscribeMessages(), [matchId])
 
   useEffect(() => {
     if (!match || match.seen) return
