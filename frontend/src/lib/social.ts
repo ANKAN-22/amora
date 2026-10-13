@@ -159,7 +159,7 @@ export function outgoingLikes(social: SocialState = state) {
   return social.liked
     .map((id) => social.people[id])
     .filter((student): student is Person => {
-      return !!student && !social.blocks.includes(student.id) && !isMatched(student.id, social)
+      return !!student && !social.blocks.includes(student.id) && !social.blockedBy.includes(student.id) && !isMatched(student.id, social)
     })
 }
 
@@ -391,7 +391,7 @@ export async function sendMessage(matchId: string, text: string) {
   const trimmed = text.trim()
   const me = getSession().userId
   const match = state.matches.find((item) => item.id === matchId)
-  if (!supabase || !me || !match || !trimmed || trimmed.length > 500 || state.blocks.includes(match.studentId)) return false
+  if (!supabase || !me || !match || !trimmed || trimmed.length > 500 || state.blocks.includes(match.studentId) || state.blockedBy.includes(match.studentId)) return false
   const { error } = await supabase.from('messages').insert({ match_id: matchId, sender_id: me, body: trimmed })
   if (error) return false
   await reloadSocial()

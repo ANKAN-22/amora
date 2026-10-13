@@ -32,7 +32,7 @@ export function StudentPage() {
 
   if (!social.ready) return <p className="px-5 pt-8 text-sm text-mute">Loading…</p>
 
-  if (!student || social.blocks.includes(student.id)) {
+  if (!student || social.blocks.includes(student.id) || social.blockedBy.includes(student.id)) {
     return <Navigate to="/discover" replace />
   }
 
