@@ -37,6 +37,7 @@ export function ChatPage() {
   const [sheet, setSheet] = useState<SheetMode>(null)
   const [reportMessageId, setReportMessageId] = useState('')
   const endRef = useRef<HTMLDivElement>(null)
+  const composerRef = useRef<HTMLTextAreaElement>(null)
   const messages = messagesFor(matchId, social)
   const latestIncomingId = messages.reduce((id, message) => (message.from === 'them' ? message.id : id), '')
 
@@ -50,6 +51,13 @@ export function ChatPage() {
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' })
   }, [messages.length])
+
+  useEffect(() => {
+    const box = composerRef.current
+    if (!box) return
+    box.style.height = 'auto'
+    box.style.height = `${Math.min(box.scrollHeight, 128)}px`
+  }, [draft])
 
   if (!social.ready) return <p className="px-5 pt-8 text-sm text-mute">Loading…</p>
 
@@ -161,17 +169,25 @@ export function ChatPage() {
             {sendError}
           </p>
         ) : null}
-        <div className="flex items-center gap-2">
-          <input
+        <div className="flex items-end gap-2">
+          <textarea
+            ref={composerRef}
             value={draft}
+            rows={1}
             onChange={(event) => {
               setDraft(event.target.value)
               if (sendError) setSendError('')
             }}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
+              if (!window.matchMedia('(pointer: fine)').matches) return
+              event.preventDefault()
+              void submitMessage()
+            }}
             maxLength={500}
             placeholder="Message"
             aria-label="Message"
-            className="h-12 min-w-0 flex-1 rounded-full bg-blush px-4 text-sm outline-none placeholder:text-mute"
+            className="max-h-32 min-h-12 min-w-0 flex-1 resize-none overflow-y-auto rounded-[1.5rem] bg-blush px-4 py-3 text-sm leading-5 outline-none placeholder:text-mute"
           />
           <button
             type="submit"
